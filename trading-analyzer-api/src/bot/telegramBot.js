@@ -129,6 +129,19 @@ bot.on('callback_query', async (query) => {
   const state = chatState.get(chatId) || { step: 'pair' };
   logger.info(`Callback received: ${data} (step=${state.step}, pair=${state.pair || '-'})`);
 
+  // Show detailed analysis
+  if (data === 'show_detailed') {
+    await bot.answerCallbackQuery(query.id);
+    const lastAnalysis = state.lastAnalysis;
+    if (lastAnalysis && lastAnalysis.fullAnalysis) {
+      const detailedMsg = `DETAILED ANALYSIS\n${lastAnalysis.pair} | ${lastAnalysis.strategy.toUpperCase()}\n\n${lastAnalysis.fullAnalysis}`;
+      await bot.sendMessage(chatId, detailedMsg);
+    } else {
+      await bot.sendMessage(chatId, 'No detailed analysis available.');
+    }
+    return;
+  }
+
   // Retry analysis
   if (data.startsWith('retry_')) {
     const parts = data.split('_');
@@ -335,16 +348,21 @@ bot.on('callback_query', async (query) => {
       // Add zone info
       const zone = result.daily_zone || result.primary_zone;
       if (zone && zone.price_low && zone.price_high) {
-        const zoneType = zone.type || (result.signal === 'buy' ? 'support' : 'resistance');
+        const zoneType = zone.type || (result.signal === 'buy' ? 'buy' : 'sell');
         caption += `\nZone (${zoneType}):\n`;
         caption += `${zone.price_low} - ${zone.price_high}\n`;
       }
 
-      // Add reasoning
-      const reasoning = extractReasoning(result);
-      if (reasoning) {
-        caption += `\nAnalysis: ${reasoning}`;
+      // Add short point form analysis
+      const shortAnalysis = extractShortAnalysis(result);
+      if (shortAnalysis) {
+        caption += `\n${shortAnalysis}`;
       }
+
+      // Store full analysis for detailed view
+      const fullAnalysis = extractReasoning(result);
+      state.lastAnalysis = { result, pair: state.pair, strategy, fullAnalysis };
+      chatState.set(chatId, state);
 
       // Always send the bottom chart (M30 for swing, 5min for scalping)
       if (result.charts && result.charts.length > 0) {
@@ -364,8 +382,8 @@ bot.on('callback_query', async (query) => {
         await bot.sendMessage(chatId, explanation);
       }
 
-      // Send retry options
-      await bot.sendMessage(chatId, 'What would you like to do next?', retryKeyboard(state.pair, strategy));
+      // Send retry options with detailed analysis
+      await bot.sendMessage(chatId, 'What would you like to do next?', retryKeyboard(state.pair, strategy, fullAnalysis));
 
       state.processing = false;
       chatState.set(chatId, state);
@@ -379,7 +397,7 @@ bot.on('callback_query', async (query) => {
         `Analysis failed: ${error.message}\n\nPlease try again or choose a different instrument.`
       );
 
-      await bot.sendMessage(chatId, 'What would you like to do?', retryKeyboard(state.pair, strategy));
+      await bot.sendMessage(chatId, 'What would you like to do?', retryKeyboard(state.pair, strategy, false));
 
       state.processing = false;
       chatState.set(chatId, state);
@@ -396,6 +414,31 @@ bot.on('message', async (msg) => {
 });
 
 // Helper functions
+function extractShortAnalysis(result) {
+  const points = [];
+  
+  // Key points from analysis
+  if (result.trend) {
+    points.push(`• Trend: ${result.trend}`);
+  }
+  if (result.pattern) {
+    points.push(`• Pattern: ${result.pattern.replace('_', ' ')}`);
+  }
+  if (result.micro_trend) {
+    points.push(`• Micro: ${result.micro_trend}`);
+  }
+  
+  // Price position relative to zone
+  const zone = result.daily_zone || result.primary_zone;
+  const entry = result.m30_analysis || result.entry_analysis || {};
+  if (entry.price_position) {
+    points.push(`• Position: ${entry.price_position}`);
+  }
+  
+  if (points.length === 0) return '';
+  return '\nKey Points:\n' + points.join('\n');
+}
+
 function extractReasoning(result) {
   // Get reasoning from analysis
   const daily = result.daily_analysis || {};
@@ -453,15 +496,24 @@ function buildInvalidExplanation(result, strategy) {
   return lines.join('\n');
 }
 
-function retryKeyboard(pair, strategy) {
+function retryKeyboard(pair, strategy, hasDetailedAnalysis) {
+  const buttons = [
+    [
+      { text: 'Retry Analysis', callback_data: `retry_${pair}_${strategy}` },
+      { text: 'Back to Menu', callback_data: 'back_to_menu' }
+    ]
+  ];
+  
+  // Add detailed analysis button if available
+  if (hasDetailedAnalysis) {
+    buttons.unshift([
+      { text: '📋 Show Detailed Analysis', callback_data: 'show_detailed' }
+    ]);
+  }
+  
   return {
     reply_markup: {
-      inline_keyboard: [
-        [
-          { text: 'Retry Analysis', callback_data: `retry_${pair}_${strategy}` },
-          { text: 'Back to Menu', callback_data: 'back_to_menu' }
-        ]
-      ]
+      inline_keyboard: buttons
     }
   };
 }
