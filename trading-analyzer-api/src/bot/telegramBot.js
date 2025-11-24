@@ -415,28 +415,20 @@ bot.on('message', async (msg) => {
 
 // Helper functions
 function extractShortAnalysis(result) {
-  const points = [];
+  // Get full reasoning and convert to short points
+  const reasoning = extractReasoning(result);
+  if (!reasoning) return '';
   
-  // Key points from analysis
-  if (result.trend) {
-    points.push(`• Trend: ${result.trend}`);
-  }
-  if (result.pattern) {
-    points.push(`• Pattern: ${result.pattern.replace('_', ' ')}`);
-  }
-  if (result.micro_trend) {
-    points.push(`• Micro: ${result.micro_trend}`);
-  }
+  // Split into sentences and take first 2-3 key points
+  const sentences = reasoning
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20 && s.length < 200); // Filter out very short/long sentences
   
-  // Price position relative to zone
-  const zone = result.daily_zone || result.primary_zone;
-  const entry = result.m30_analysis || result.entry_analysis || {};
-  if (entry.price_position) {
-    points.push(`• Position: ${entry.price_position}`);
-  }
+  const points = sentences.slice(0, 3).map(s => `• ${s}`);
   
   if (points.length === 0) return '';
-  return '\nKey Points:\n' + points.join('\n');
+  return '\nAnalysis:\n' + points.join('\n');
 }
 
 function extractReasoning(result) {
@@ -507,7 +499,7 @@ function retryKeyboard(pair, strategy, hasDetailedAnalysis) {
   // Add detailed analysis button if available
   if (hasDetailedAnalysis) {
     buttons.unshift([
-      { text: '📋 Show Detailed Analysis', callback_data: 'show_detailed' }
+      { text: 'Show Detailed Analysis', callback_data: 'show_detailed' }
     ]);
   }
   
