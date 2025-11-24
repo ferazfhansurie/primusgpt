@@ -2,6 +2,13 @@
 
 A complete rewrite of the trading analysis system that uses **TwelveData API** to fetch market data instead of taking screenshots. The system follows the same proven SOP (Standard Operating Procedures) for Swing and Scalping strategies, but feeds structured market data to AI for analysis, then generates professional candlestick charts with zones.
 
+## Quick Links
+
+- 📖 [Commodities Trading Guide](./COMMODITIES.md) - Full guide to trading Gold, Silver, Oil, etc.
+- 🤖 [Telegram Bot README](./src/bot/README.md) - Interactive bot interface
+- 🚀 [Quick Start Guide](./QUICKSTART.md) - Get started in 5 minutes
+- 📊 [Project Summary](./PROJECT_SUMMARY.md) - Technical architecture
+
 ## Key Differences from Original
 
 | Feature | Original (ai-trading-analyzer) | This Version (trading-analyzer-api) |
@@ -11,7 +18,7 @@ A complete rewrite of the trading analysis system that uses **TwelveData API** t
 | Chart Generation | Screenshot + overlay | Programmatic generation (Canvas) |
 | Speed | Slower (browser automation) | Faster (direct API calls) |
 | Cost | Free | API costs (free tier: 800 calls/day) |
-| Assets | Forex + Gold | Forex only (free tier) |
+| Assets | Forex + Gold | Forex + Commodities (Gold, Silver, Oil) |
 
 ## Features
 
@@ -21,6 +28,7 @@ A complete rewrite of the trading analysis system that uses **TwelveData API** t
 ✅ **Automatic Chart Generation** - Creates candlestick charts with zones  
 ✅ **Smart Pattern Detection** - Identifies engulfing patterns, pin bars, etc.  
 ✅ **Support/Resistance Detection** - Automatically finds key levels  
+✅ **Commodities Support** - Trade Gold, Silver, Oil (Premium tier)  
 ✅ **Rate Limiting** - Respects API limits (8 calls/min free tier)  
 ✅ **JSON Reports** - Detailed analysis reports saved for each run  
 ✅ **Telegram Bot** - Interactive bot interface for easy analysis on-the-go  
@@ -91,7 +99,7 @@ TWELVEDATA_API_KEY=your_twelvedata_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional: Model selection
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4.1-mini
 ```
 
 ### 4. Get API Keys
@@ -139,12 +147,21 @@ npm test
 
 ## Available Pairs (Free Tier)
 
+### Forex Pairs
 - EUR/USD
 - GBP/USD
 - USD/JPY
 - AUD/USD
 - USD/CAD
 - NZD/USD
+
+### Commodities (Premium Tier Required)
+- **XAU/USD** - Gold Spot
+- **XAG/USD** - Silver Spot
+- **BRENT** - Brent Crude Oil
+- **WTI** - WTI Crude Oil
+
+> **Note:** Commodities require a TwelveData premium subscription. See [COMMODITIES.md](./COMMODITIES.md) for details.
 
 ## Available Strategies
 
@@ -312,6 +329,16 @@ Error: TwelveData API key not configured
 
 **Solution:** Make sure `.env` file exists with valid `TWELVEDATA_API_KEY`
 
+### Commodities Access Issues
+
+```
+Error: Commodities require premium TwelveData subscription
+```
+
+**Solution:** Upgrade to a TwelveData premium plan at https://twelvedata.com/pricing
+
+For full commodities documentation, see [COMMODITIES.md](./COMMODITIES.md)
+
 ### Rate Limit Errors
 
 ```
@@ -350,15 +377,15 @@ npm install canvas --build-from-source
 ## Limitations
 
 1. **API Costs:** Free tier limited to 800 calls/day
-2. **Forex Only:** Free tier doesn't support commodities (Gold, Oil)
+2. **Commodities:** Require premium TwelveData subscription
 3. **Data Dependency:** Relies on TwelveData API availability
 
 ## Future Enhancements
 
 - [ ] Add more indicators (RSI, MACD, Bollinger Bands)
 - [ ] Support for crypto pairs
+- [ ] More commodities (Copper, Natural Gas, Agricultural)
 - [ ] Backtesting functionality
-- [ ] Telegram bot integration
 - [ ] Real-time alerts
 - [ ] Multi-timeframe correlation analysis
 

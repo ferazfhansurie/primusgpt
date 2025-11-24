@@ -7,11 +7,14 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node src/test.js",
+    "test:commodities": "node src/test-commodities.js",
     "bot": "node src/bot/telegramBot.js"
   },
   "keywords": [
     "trading",
     "forex",
+    "commodities",
+    "gold",
     "twelvedata",
     "ai",
     "analysis"

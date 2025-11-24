@@ -270,29 +270,44 @@ class StrategyOrchestrator {
    * Analyze all configured pairs with all active strategies
    */
   async analyzeAll() {
-    const pairs = config.tradingPairs;
+    // Combine all instruments from all categories
+    let allInstruments = [];
+    if (config.instruments) {
+      // New structure with categories
+      Object.values(config.instruments).forEach(instruments => {
+        allInstruments = allInstruments.concat(instruments);
+      });
+    } else {
+      // Fallback to old structure
+      allInstruments = [...config.tradingPairs];
+      if (config.commodities) {
+        allInstruments = allInstruments.concat(config.commodities);
+      }
+    }
+    
     const strategies = config.activeStrategies;
     const results = [];
 
     logger.info(`\n${'='.repeat(60)}`);
     logger.info(`Starting batch analysis`);
-    logger.info(`Pairs: ${pairs.join(', ')}`);
+    logger.info(`Instruments: ${allInstruments.join(', ')}`);
+    logger.info(`Instruments: ${allInstruments.join(', ')}`);
     logger.info(`Strategies: ${strategies.join(', ')}`);
     logger.info('='.repeat(60));
 
-    for (const pair of pairs) {
+    for (const instrument of allInstruments) {
       for (const strategy of strategies) {
         try {
-          const result = await this.analyzePair(pair, strategy);
+          const result = await this.analyzePair(instrument, strategy);
           results.push({
-            pair,
+            pair: instrument,
             strategy,
             success: true,
             result
           });
         } catch (error) {
           results.push({
-            pair,
+            pair: instrument,
             strategy,
             success: false,
             error: error.message

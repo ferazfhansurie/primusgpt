@@ -177,6 +177,62 @@ class TwelveDataClient {
 
     return results;
   }
+
+  /**
+   * Get list of available commodities
+   * Premium tier required for commodities
+   * @param {string} category - Optional category filter (e.g., 'Precious Metal')
+   * @returns {Promise<Array>} List of commodities
+   */
+  async getCommodities(category = null) {
+    try {
+      await this.rateLimitWait();
+
+      logger.info('Fetching available commodities...');
+
+      const params = {
+        apikey: this.apiKey,
+        format: 'JSON'
+      };
+
+      if (category) {
+        params.category = category;
+      }
+
+      const response = await axios.get(`${this.baseUrl}/commodities`, {
+        params,
+        timeout: 10000
+      });
+
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message || 'API error');
+      }
+
+      if (!response.data.data || !Array.isArray(response.data.data)) {
+        throw new Error('Invalid response format');
+      }
+
+      const commodities = response.data.data.map(item => ({
+        symbol: item.symbol,
+        name: item.name,
+        category: item.category,
+        description: item.description
+      }));
+
+      logger.success(`✓ Fetched ${commodities.length} commodities`);
+
+      return commodities;
+
+    } catch (error) {
+      logger.error('Failed to fetch commodities:', error.message);
+      
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        throw new Error('Commodities require premium TwelveData subscription');
+      }
+      
+      throw error;
+    }
+  }
 }
 
 export default TwelveDataClient;

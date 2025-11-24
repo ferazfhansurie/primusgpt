@@ -103,7 +103,7 @@ trading-analyzer-api/
 
 ### API Requirements
 - TwelveData API key (free tier sufficient)
-- OpenAI API key (gpt-4o-mini recommended)
+- OpenAI API key (gpt-4.1-mini recommended)
 
 ### Performance
 - Analysis time: 30-60 seconds per pair

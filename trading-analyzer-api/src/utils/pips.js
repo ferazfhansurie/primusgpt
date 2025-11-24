@@ -3,14 +3,27 @@
  */
 
 const pipValues = {
+  // Forex pairs
   'EUR/USD': 0.0001,
   'GBP/USD': 0.0001,
   'AUD/USD': 0.0001,
   'NZD/USD': 0.0001,
   'USD/CAD': 0.0001,
   'USD/JPY': 0.01,
-  'XAUUSD': 0.1,
-  'GOLD': 0.1
+  
+  // Commodities - Precious Metals
+  'XAU/USD': 0.1,     // Gold
+  'XAUUSD': 0.1,      // Gold (alternative format)
+  'GOLD': 0.1,        // Gold (alternative format)
+  'XAG/USD': 0.01,    // Silver
+  'XAGUSD': 0.01,     // Silver (alternative format)
+  'SILVER': 0.01,     // Silver (alternative format)
+  
+  // Commodities - Energy
+  'BRENT': 0.01,      // Brent Crude Oil
+  'WTI': 0.01,        // WTI Crude Oil
+  'CL': 0.01,         // Crude Oil
+  'NG': 0.001,        // Natural Gas
 };
 
 /**
@@ -66,11 +79,22 @@ export function validateZoneSize(pair, priceHigh, priceLow, minPips, maxPips) {
  * @returns {string} Formatted price
  */
 export function formatPrice(pair, price) {
+  // JPY pairs use 3 decimals
   if (pair.includes('JPY')) {
     return price.toFixed(3);
   }
-  if (pair.includes('XAU') || pair.includes('GOLD')) {
+  
+  // Precious metals use 2 decimals
+  if (pair.includes('XAU') || pair.includes('GOLD') || 
+      pair.includes('XAG') || pair.includes('SILVER')) {
     return price.toFixed(2);
   }
+  
+  // Energy commodities use 2 decimals
+  if (pair === 'BRENT' || pair === 'WTI' || pair === 'CL' || pair === 'NG') {
+    return price.toFixed(2);
+  }
+  
+  // Forex pairs use 5 decimals
   return price.toFixed(5);
 }

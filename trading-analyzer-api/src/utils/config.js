@@ -16,7 +16,7 @@ const config = {
   
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
     maxTokens: 3000,
     temperature: 0.3
   },
@@ -30,6 +30,32 @@ const config = {
     'USD/CAD',
     'NZD/USD'
   ],
+
+  // Commodities (Premium tier required)
+  commodities: [
+    'XAU/USD',  // Gold Spot
+    'XAG/USD',  // Silver Spot
+    'BRENT',    // Brent Crude Oil
+    'WTI',      // WTI Crude Oil
+  ],
+
+  // All available instruments grouped by type
+  instruments: {
+    forex: [
+      'EUR/USD',
+      'GBP/USD',
+      'USD/JPY',
+      'AUD/USD',
+      'USD/CAD',
+      'NZD/USD'
+    ],
+    commodities: [
+      'XAU/USD',  // Gold
+      'XAG/USD',  // Silver
+      'BRENT',    // Brent Crude Oil
+      'WTI',      // WTI Crude Oil
+    ]
+  },
 
   // Active Strategies
   activeStrategies: ['swing', 'scalping'],

@@ -6,9 +6,14 @@ import logger from '../utils/logger.js';
 import StrategyOrchestrator from '../core/orchestrator.js';
 import config from '../utils/config.js';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from project root
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // Ensure BOT_TOKEN exists
 const token = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
@@ -27,11 +32,39 @@ logger.success('Telegram bot started (API version). Waiting for commands...');
 const chatState = new Map();
 
 function resetState(chatId) {
-  chatState.set(chatId, { step: 'pair', pair: null, strategy: null, processing: false });
+  chatState.set(chatId, { step: 'market', pair: null, strategy: null, market: null, processing: false });
 }
 
-function getForexPairs() {
-  return config.tradingPairs; // All are forex pairs in API version
+function getMarketCategories() {
+  return [
+    { name: 'Forex', key: 'forex' },
+    { name: 'Gold', key: 'gold' }
+  ];
+}
+
+function getInstruments(category) {
+  if (category === 'gold') {
+    return ['XAU/USD'];
+  }
+  if (!config.instruments || !config.instruments[category]) {
+    // Fallback to old behavior
+    return config.tradingPairs;
+  }
+  return config.instruments[category];
+}
+
+function marketCategoryKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: 'Forex', callback_data: 'market:forex' },
+          { text: 'Gold', callback_data: 'market:gold' }
+        ],
+        [ { text: 'Cancel', callback_data: 'cancel' } ]
+      ]
+    }
+  };
 }
 
 function strategyKeyboard() {
@@ -45,37 +78,39 @@ function strategyKeyboard() {
   };
 }
 
-function forexPairsKeyboard() {
-  const pairs = getForexPairs().slice(0, 8);
+function instrumentsKeyboard(category) {
+  const instruments = getInstruments(category);
   const rows = [];
-  for (let i = 0; i < pairs.length; i += 2) {
+  
+  for (let i = 0; i < instruments.length; i += 2) {
     rows.push([
-      { text: pairs[i], callback_data: `pair:${pairs[i]}` },
-      pairs[i+1] ? { text: pairs[i+1], callback_data: `pair:${pairs[i+1]}` } : undefined
+      { text: instruments[i], callback_data: `pair:${instruments[i]}` },
+      instruments[i+1] ? { text: instruments[i+1], callback_data: `pair:${instruments[i+1]}` } : undefined
     ].filter(Boolean));
   }
-  rows.push([ { text: 'Cancel', callback_data: 'cancel' } ]);
+  
+  rows.push([
+    { text: 'Back', callback_data: 'back:market' },
+    { text: 'Cancel', callback_data: 'cancel' }
+  ]);
+  
   return { reply_markup: { inline_keyboard: rows } };
 }
 
 // Help message
 const helpMsg = `
-🤖 AI Trading Analyzer Bot (API Version)
+PRIMUS GPT - AI Trading Analyzer
 ========================================
-Uses TwelveData API + AI Analysis
 
-How it works:
-1) Choose Forex pair
-2) Choose strategy: Swing or Scalping
-3) Bot fetches real-time data from TwelveData
-4) AI analyzes following proven SOP
-5) Sends annotated chart with zones
+Supported Markets:
+- Forex: Major currency pairs
+- Gold: XAU/USD spot price
 
 Features:
-✅ Real-time market data
-✅ AI-powered analysis
-✅ Professional charts
-✅ Detailed validation
+- Real-time market data
+- AI-powered analysis
+- Professional charts
+- Detailed validation
 
 Command:
 /start - Start analysis
@@ -84,7 +119,7 @@ Command:
 bot.onText(/^\/start$/, async (msg) => {
   resetState(msg.chat.id);
   await bot.sendMessage(msg.chat.id, helpMsg);
-  await bot.sendMessage(msg.chat.id, 'Select a forex pair:', forexPairsKeyboard());
+  await bot.sendMessage(msg.chat.id, 'Select market type:', marketCategoryKeyboard());
 });
 
 // Inline button flow
@@ -112,7 +147,7 @@ bot.on('callback_query', async (query) => {
   if (data === 'back_to_menu') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Back to menu' });
-    await bot.sendMessage(chatId, 'Select a forex pair:', forexPairsKeyboard());
+    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
     return;
   }
 
@@ -120,17 +155,41 @@ bot.on('callback_query', async (query) => {
   if (data === 'cancel') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Cancelled' });
-    await bot.sendMessage(chatId, 'Cancelled. Select a forex pair:', forexPairsKeyboard());
+    await bot.sendMessage(chatId, 'Cancelled. Select market type:', marketCategoryKeyboard());
     return;
   }
 
-  // Back to pairs
+  // Back to market categories
   if (data === 'back:market') {
-    state.step = 'pair';
+    state.step = 'market';
     state.pair = null;
+    state.market = null;
     chatState.set(chatId, state);
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Select a forex pair:', forexPairsKeyboard());
+    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    return;
+  }
+
+  // Market category selection
+  if (data.startsWith('market:')) {
+    const market = data.split(':')[1];
+    state.market = market;
+    
+    // If gold, skip pair selection and go straight to strategy
+    if (market === 'gold') {
+      state.pair = 'XAU/USD';
+      state.step = 'strategy';
+      chatState.set(chatId, state);
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, 'Gold (XAU/USD) - Choose strategy:', strategyKeyboard());
+      return;
+    }
+    
+    // For forex, show pair selection
+    state.step = 'pair';
+    chatState.set(chatId, state);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, 'Select Forex pair:', instrumentsKeyboard(market));
     return;
   }
 
@@ -165,7 +224,7 @@ bot.on('callback_query', async (query) => {
 
     const statusMessage = await bot.sendMessage(
       chatId, 
-      `📊 ${strategy.toUpperCase()} analysis for ${state.pair}\n\n⏳ Initializing...`
+      `PRIMUS GPT - ${strategy.toUpperCase()} Analysis\n${state.pair}\n\nInitializing...`
     );
     const statusId = statusMessage.message_id;
 
@@ -179,16 +238,16 @@ bot.on('callback_query', async (query) => {
     // Helper function to update status
     const updateStatus = async (message) => {
       await bot.editMessageText(
-        `📊 ${strategy.toUpperCase()} analysis for ${state.pair}\n\n${message}`,
+        `PRIMUS GPT - ${strategy.toUpperCase()} Analysis\n${state.pair}\n\n${message}`,
         { chat_id: chatId, message_id: statusId }
       ).catch(() => {});
     };
 
     try {
       // Step 1: Validate API keys
-      await updateStatus('⏳ Validating API keys...');
+      await updateStatus('[1/6] Validating API keys...');
       await orchestrator.validateKeys();
-      await updateStatus('✅ API keys validated\n⏳ Fetching market data...');
+      await updateStatus('[2/6] Fetching market data...');
 
       // Step 2: Get strategy and timeframes
       const strategyObj = orchestrator.strategies[strategy];
@@ -198,16 +257,16 @@ bot.on('callback_query', async (query) => {
       const timeframes = strategyObj.getRequiredTimeframes();
 
       // Step 3: Fetch market data with progress
-      await updateStatus('✅ API keys validated\n⏳ Fetching market data (timeframe 1/2)...');
+      await updateStatus(`[2/6] Fetching ${timeframes[0].interval} data...`);
       const tf1Data = await orchestrator.apiClient.getTimeSeries(state.pair, timeframes[0].interval, timeframes[0].bars);
       const tf1Formatted = orchestrator.dataFormatter.formatForAI(tf1Data, state.pair, timeframes[0].interval);
       
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n⏳ Fetching market data (timeframe 2/2)...`);
+      await updateStatus(`[3/6] Fetching ${timeframes[1].interval} data...`);
       const tf2Data = await orchestrator.apiClient.getTimeSeries(state.pair, timeframes[1].interval, timeframes[1].bars);
       const tf2Formatted = orchestrator.dataFormatter.formatForAI(tf2Data, state.pair, timeframes[1].interval);
 
       // Step 4: AI Analysis
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n✅ ${timeframes[1].interval} data fetched\n⏳ Running AI analysis (timeframe 1/2)...`);
+      await updateStatus(`[4/6] Analyzing ${timeframes[0].interval} timeframe...`);
       
       let prompt1;
       if (strategy === 'swing') {
@@ -217,7 +276,7 @@ bot.on('callback_query', async (query) => {
       }
       const analysis1 = await orchestrator.gptAnalyzer.analyze(prompt1, tf1Formatted);
 
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n✅ ${timeframes[1].interval} data fetched\n✅ ${timeframes[0].interval} analyzed\n⏳ Running AI analysis (timeframe 2/2)...`);
+      await updateStatus(`[4/6] Analyzing ${timeframes[1].interval} timeframe...`);
       
       let prompt2;
       if (strategy === 'swing') {
@@ -228,7 +287,7 @@ bot.on('callback_query', async (query) => {
       const analysis2 = await orchestrator.gptAnalyzer.analyze(prompt2, tf2Formatted);
 
       // Step 5: Combine analyses
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n✅ ${timeframes[1].interval} data fetched\n✅ ${timeframes[0].interval} analyzed\n✅ ${timeframes[1].interval} analyzed\n⏳ Validating setup...`);
+      await updateStatus('[5/6] Validating setup...');
       
       const analyses = [
         { timeframe: timeframes[0].interval, analysis: analysis1 },
@@ -237,7 +296,7 @@ bot.on('callback_query', async (query) => {
       const combinedAnalysis = orchestrator.combineAnalyses(strategyObj, analyses);
 
       // Step 6: Generate chart (always generate, even if invalid)
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n✅ ${timeframes[1].interval} data fetched\n✅ ${timeframes[0].interval} analyzed\n✅ ${timeframes[1].interval} analyzed\n✅ Setup validated\n⏳ Generating chart...`);
+      await updateStatus('[6/6] Generating chart...');
       
       const marketData = {
         [timeframes[0].interval]: { ohlcv: tf1Data, formatted: tf1Formatted },
@@ -246,7 +305,7 @@ bot.on('callback_query', async (query) => {
       combinedAnalysis.charts = await orchestrator.generateCharts(state.pair, strategy, combinedAnalysis, marketData);
 
       // Final status
-      await updateStatus(`✅ API keys validated\n✅ ${timeframes[0].interval} data fetched\n✅ ${timeframes[1].interval} data fetched\n✅ ${timeframes[0].interval} analyzed\n✅ ${timeframes[1].interval} analyzed\n✅ Setup validated\n✅ Analysis complete`);
+      await updateStatus('[6/6] Analysis complete');
 
       // Clear typing indicator
       clearInterval(typingInterval);
@@ -260,10 +319,11 @@ bot.on('callback_query', async (query) => {
       // Build caption
       const statusLabel = result.signal.toUpperCase();
       const confidence = (result.confidence * 100).toFixed(1);
-      const validStatus = result.valid ? '✅ Valid' : '⚠️ Invalid';
+      const validStatus = result.valid ? 'VALID' : 'INVALID';
 
-      let caption = `${state.pair} • ${strategy.toUpperCase()}\n`;
-      caption += `${validStatus}\n`;
+      let caption = `PRIMUS GPT Analysis\n`;
+      caption += `${state.pair} | ${strategy.toUpperCase()}\n`;
+      caption += `Status: ${validStatus}\n`;
       caption += `Signal: ${statusLabel}\n`;
       caption += `Confidence: ${confidence}%\n`;
 
@@ -283,7 +343,7 @@ bot.on('callback_query', async (query) => {
       // Add reasoning
       const reasoning = extractReasoning(result);
       if (reasoning) {
-        caption += `\n📝 ${reasoning}`;
+        caption += `\nAnalysis: ${reasoning}`;
       }
 
       // Always send the bottom chart (M30 for swing, 5min for scalping)
@@ -316,7 +376,7 @@ bot.on('callback_query', async (query) => {
       
       await bot.sendMessage(
         chatId, 
-        `❌ Analysis failed: ${error.message}\n\nPlease try again or choose a different pair.`
+        `Analysis failed: ${error.message}\n\nPlease try again or choose a different instrument.`
       );
 
       await bot.sendMessage(chatId, 'What would you like to do?', retryKeyboard(state.pair, strategy));
@@ -348,7 +408,7 @@ function extractReasoning(result) {
 }
 
 function buildInvalidExplanation(result, strategy) {
-  const lines = ['⚠️ Analysis has validation issues:\n'];
+  const lines = ['VALIDATION ISSUES:\n'];
   
   const v = result.validation || {};
   
@@ -356,12 +416,12 @@ function buildInvalidExplanation(result, strategy) {
   if (v.daily || v.primary) {
     const d = v.daily || v.primary;
     if (d.errors && d.errors.length > 0) {
-      lines.push('❌ Primary timeframe issues:');
-      d.errors.forEach(e => lines.push(`  • ${e}`));
+      lines.push('Primary timeframe issues:');
+      d.errors.forEach(e => lines.push(`  - ${e}`));
     }
     if (d.warnings && d.warnings.length > 0) {
-      lines.push('⚠️ Primary timeframe notes:');
-      d.warnings.forEach(w => lines.push(`  • ${w}`));
+      lines.push('Primary timeframe notes:');
+      d.warnings.forEach(w => lines.push(`  - ${w}`));
     }
   }
   
@@ -369,26 +429,26 @@ function buildInvalidExplanation(result, strategy) {
   if (v.m30 || v.entry) {
     const e = v.m30 || v.entry;
     if (e.errors && e.errors.length > 0) {
-      lines.push('\n❌ Entry timeframe issues:');
-      e.errors.forEach(err => lines.push(`  • ${err}`));
+      lines.push('\nEntry timeframe issues:');
+      e.errors.forEach(err => lines.push(`  - ${err}`));
     }
     if (e.warnings && e.warnings.length > 0) {
-      lines.push('⚠️ Entry timeframe notes:');
-      e.warnings.forEach(w => lines.push(`  • ${w}`));
+      lines.push('Entry timeframe notes:');
+      e.warnings.forEach(w => lines.push(`  - ${w}`));
     }
   }
 
   // Add explanation
-  lines.push('\n💡 What this means:');
+  lines.push('\nNOTE:');
   if (strategy === 'swing') {
-    lines.push('  • For optimal swing setups, M30 patterns close to Daily zones work best');
-    lines.push('  • Current setup may still be tradeable with proper risk management');
+    lines.push('For optimal swing setups, M30 patterns close to Daily zones work best.');
+    lines.push('Current setup may still be tradeable with proper risk management.');
   } else {
-    lines.push('  • For optimal scalping setups, 5-min patterns close to 15-min zones work best');
-    lines.push('  • Current setup may still be tradeable with tighter stops');
+    lines.push('For optimal scalping setups, 5-min patterns close to 15-min zones work best.');
+    lines.push('Current setup may still be tradeable with tighter stops.');
   }
 
-  lines.push('\n🔄 You can retry for a different analysis or try another pair.');
+  lines.push('\nYou can retry for a different analysis or try another instrument.');
 
   return lines.join('\n');
 }
@@ -398,8 +458,8 @@ function retryKeyboard(pair, strategy) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '🔄 Retry Analysis', callback_data: `retry_${pair}_${strategy}` },
-          { text: '🏠 Back to Menu', callback_data: 'back_to_menu' }
+          { text: 'Retry Analysis', callback_data: `retry_${pair}_${strategy}` },
+          { text: 'Back to Menu', callback_data: 'back_to_menu' }
         ]
       ]
     }
