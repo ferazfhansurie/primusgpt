@@ -125,7 +125,7 @@ bot.onText(/^\/start$/, async (msg) => {
 // Inline button flow
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
-  const data = query.data || '';
+  let data = query.data || '';
   const state = chatState.get(chatId) || { step: 'pair' };
   logger.info(`Callback received: ${data} (step=${state.step}, pair=${state.pair || '-'})`);
 
@@ -136,6 +136,8 @@ bot.on('callback_query', async (query) => {
     if (lastAnalysis && lastAnalysis.fullAnalysis) {
       const detailedMsg = `DETAILED ANALYSIS\n${lastAnalysis.pair} | ${lastAnalysis.strategy.toUpperCase()}\n\n${lastAnalysis.fullAnalysis}`;
       await bot.sendMessage(chatId, detailedMsg);
+      // Send the same action buttons after detailed analysis
+      await bot.sendMessage(chatId, 'What would you like to do next?', retryKeyboard(state.pair, state.strategy, false));
     } else {
       await bot.sendMessage(chatId, 'No detailed analysis available.');
     }
@@ -147,13 +149,13 @@ bot.on('callback_query', async (query) => {
     const parts = data.split('_');
     const pair = parts[1];
     const strategy = parts[2];
-    await bot.answerCallbackQuery(query.id, { text: 'Retrying analysis...' });
+    // Don't answer callback here - let it be answered by strategy handler
     state.pair = pair;
     state.strategy = strategy;
     state.step = 'strategy';
     chatState.set(chatId, state);
-    // Trigger strategy callback
-    query.data = `strategy:${strategy}`;
+    // Change data to strategy to trigger analysis below
+    data = `strategy:${strategy}`;
   }
 
   // Back to menu
@@ -221,19 +223,20 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith('strategy:')) {
     const strategy = data.split(':')[1];
     if (!state.pair) {
-      await bot.answerCallbackQuery(query.id, { text: 'Pick a pair first' });
+      await bot.answerCallbackQuery(query.id, { text: 'Pick a pair first' }).catch(() => {});
       await bot.sendMessage(chatId, 'Please select a pair:', marketKeyboard());
       return;
     }
     if (state.processing) {
-      await bot.answerCallbackQuery(query.id, { text: 'Analysis already in progress…' });
+      await bot.answerCallbackQuery(query.id, { text: 'Analysis already in progress…' }).catch(() => {});
       return;
     }
 
     state.processing = true;
     state.strategy = strategy;
     chatState.set(chatId, state);
-    await bot.answerCallbackQuery(query.id);
+    // Try to answer callback, but don't fail if it's too old
+    await bot.answerCallbackQuery(query.id).catch(() => {});
 
     const statusMessage = await bot.sendMessage(
       chatId, 
@@ -434,7 +437,17 @@ Respond with ONLY the 3 bullet points in this exact format:
 • [point 2]
 • [point 3]`;
 
-    const summary = await gptAnalyzer.analyze(prompt, '', true);
+    // Call OpenAI directly for summary generation
+    const response = await gptAnalyzer.openai.chat.completions.create({
+      model: gptAnalyzer.model,
+      messages: [
+        { role: 'system', content: 'You are a concise trading analysis assistant.' },
+        { role: 'user', content: prompt }
+      ],
+    
+    });
+
+    const summary = response.choices[0].message.content.trim();
     
     // Clean up and validate format
     const lines = summary.split('\n').filter(l => l.trim().startsWith('•'));
