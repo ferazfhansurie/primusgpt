@@ -317,6 +317,12 @@ bot.on('callback_query', async (query) => {
       };
       combinedAnalysis.charts = await orchestrator.generateCharts(state.pair, strategy, combinedAnalysis, marketData);
 
+      // Generate short summary
+      await updateStatus('[6/6] Generating summary...');
+      const fullAnalysisText = extractReasoning(combinedAnalysis);
+      const shortSummary = await generateShortSummary(orchestrator.gptAnalyzer, fullAnalysisText);
+      combinedAnalysis.shortSummary = shortSummary;
+
       // Final status
       await updateStatus('[6/6] Analysis complete');
 
@@ -354,7 +360,7 @@ bot.on('callback_query', async (query) => {
       }
 
       // Add short point form analysis
-      const shortAnalysis = extractShortAnalysis(result);
+      const shortAnalysis = result.shortSummary || extractShortAnalysis(result);
       if (shortAnalysis) {
         caption += `\n${shortAnalysis}`;
       }
@@ -414,9 +420,39 @@ bot.on('message', async (msg) => {
 });
 
 // Helper functions
+async function generateShortSummary(gptAnalyzer, fullAnalysis) {
+  if (!fullAnalysis) return '';
+  
+  try {
+    const prompt = `You are a trading assistant. Convert the following detailed analysis into exactly 3 concise bullet points. Each bullet point should be one short sentence (max 15 words). Focus on the most critical information only.
+
+Analysis:
+${fullAnalysis}
+
+Respond with ONLY the 3 bullet points in this exact format:
+• [point 1]
+• [point 2]
+• [point 3]`;
+
+    const summary = await gptAnalyzer.analyze(prompt, '', true);
+    
+    // Clean up and validate format
+    const lines = summary.split('\n').filter(l => l.trim().startsWith('•'));
+    if (lines.length >= 3) {
+      return '\nAnalysis:\n' + lines.slice(0, 3).join('\n');
+    }
+    
+    // Fallback to simple extraction if format is wrong
+    return extractShortAnalysis({ reasoning: fullAnalysis });
+  } catch (error) {
+    logger.error('Failed to generate short summary:', error);
+    return extractShortAnalysis({ reasoning: fullAnalysis });
+  }
+}
+
 function extractShortAnalysis(result) {
-  // Get full reasoning and convert to short points
-  const reasoning = extractReasoning(result);
+  // Fallback: Get full reasoning and convert to short points
+  const reasoning = result.reasoning || extractReasoning(result);
   if (!reasoning) return '';
   
   // Split into sentences and take first 2-3 key points
@@ -425,7 +461,7 @@ function extractShortAnalysis(result) {
     .map(s => s.trim())
     .filter(s => s.length > 20 && s.length < 200); // Filter out very short/long sentences
   
-  const points = sentences.slice(0, 3).map(s => `• ${s}`);
+  const points = sentences.slice(0, 3).map(s => `\u2022 ${s}`);
   
   if (points.length === 0) return '';
   return '\nAnalysis:\n' + points.join('\n');
