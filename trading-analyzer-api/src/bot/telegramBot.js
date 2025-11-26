@@ -118,6 +118,13 @@ Command:
 
 bot.onText(/^\/start$/, async (msg) => {
   resetState(msg.chat.id);
+  
+  // Send welcome.webp as sticker
+  const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+  if (fs.existsSync(welcomeStickerPath)) {
+    await bot.sendSticker(msg.chat.id, welcomeStickerPath);
+  }
+  
   await bot.sendMessage(msg.chat.id, helpMsg);
   await bot.sendMessage(msg.chat.id, 'Select market type:', marketCategoryKeyboard());
 });
