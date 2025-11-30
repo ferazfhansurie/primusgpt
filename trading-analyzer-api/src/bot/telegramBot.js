@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import logger from '../utils/logger.js';
 import StrategyOrchestrator from '../core/orchestrator.js';
 import config from '../utils/config.js';
+import authService from '../auth/authService.js';
+import database from '../db/database.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,13 +28,22 @@ if (!token) {
 const bot = new TelegramBot(token, { polling: true });
 const orchestrator = new StrategyOrchestrator();
 
+// Initialize auth service and database
+await authService.initialize();
+
 logger.success('Telegram bot started (API version). Waiting for commands...');
 
 // In-memory state per chat
 const chatState = new Map();
 
 function resetState(chatId) {
-  chatState.set(chatId, { step: 'market', pair: null, strategy: null, market: null, processing: false });
+  chatState.set(chatId, { 
+    step: 'market', 
+    pair: null, 
+    strategy: null, 
+    market: null, 
+    processing: false
+  });
 }
 
 function getMarketCategories() {
@@ -112,21 +123,171 @@ Features:
 - Professional charts
 - Detailed validation
 
-Command:
+Commands:
 /start - Start analysis
+/profile - View your profile & stats
+/logout - End your session
 `;
 
-bot.onText(/^\/start$/, async (msg) => {
-  resetState(msg.chat.id);
+// Middleware to check authentication
+async function requireAuth(chatId, callback) {
+  const isAuth = await authService.isAuthenticated(chatId);
   
-  // Send welcome.webp as sticker
-  const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
-  if (fs.existsSync(welcomeStickerPath)) {
-    await bot.sendSticker(msg.chat.id, welcomeStickerPath);
+  if (!isAuth) {
+    const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
+    await bot.sendMessage(
+      chatId,
+      `🔒 Access Denied\n\nYou need to register first to use this bot.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, come back and use /start to login with your Telegram account.`
+    );
+    return false;
   }
   
-  await bot.sendMessage(msg.chat.id, helpMsg);
-  await bot.sendMessage(msg.chat.id, 'Select market type:', marketCategoryKeyboard());
+  return true;
+}
+
+bot.onText(/^\/start$/, async (msg) => {
+  const chatId = msg.chat.id;
+  const telegramUser = msg.from;
+
+  try {
+    // Check if user is already authenticated
+    const isAuth = await authService.isAuthenticated(chatId);
+    
+    if (isAuth) {
+      // User is already logged in, proceed to market selection
+      resetState(chatId);
+      
+      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+      if (fs.existsSync(welcomeStickerPath)) {
+        await bot.sendSticker(chatId, welcomeStickerPath);
+      }
+      
+      await bot.sendMessage(chatId, 'Welcome back! 👋\n\n' + helpMsg);
+      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+      return;
+    }
+
+    // Check if user has a username
+    if (!telegramUser.username) {
+      await bot.sendMessage(
+        chatId,
+        `❌ Username Required\n\nYou need to set a Telegram username to use this bot.\n\nHow to set a username:\n1. Open Telegram Settings\n2. Tap on your profile\n3. Tap "Username"\n4. Create a username\n\nAfter setting your username, use /start again.`
+      );
+      await database.logLoginAttempt(chatId, false, 'no_username');
+      return;
+    }
+
+    // Check if user exists in database (registered via web with username)
+    let user = await database.getUserByUsername(telegramUser.username);
+    
+    if (!user) {
+      // User not registered
+      const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
+      
+      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+      if (fs.existsSync(welcomeStickerPath)) {
+        await bot.sendSticker(chatId, welcomeStickerPath);
+      }
+      
+      await bot.sendMessage(
+        chatId,
+        `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nYour Telegram Username: @${telegramUser.username}\n\nPlease use this username during registration.\n\nAfter registration, come back here and use /start to login.`,
+        { parse_mode: 'Markdown' }
+      );
+      
+      await database.logLoginAttempt(chatId, false, 'unregistered_user');
+      return;
+    }
+
+    // User exists but telegram_id might be null (first time login)
+    if (!user.telegram_id) {
+      // Update telegram_id for this user
+      user = await database.updateUserTelegramId(telegramUser.username, chatId);
+      logger.success(`Updated telegram_id for user @${telegramUser.username}`);
+    }
+
+    // User exists - create session and login
+    const loginResult = await authService.loginUser(chatId, {
+      username: telegramUser.username,
+      first_name: telegramUser.first_name,
+      last_name: telegramUser.last_name
+    });
+
+    const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+    if (fs.existsSync(welcomeStickerPath)) {
+      await bot.sendSticker(chatId, welcomeStickerPath);
+    }
+
+    // Login successful - proceed to market selection
+    resetState(chatId);
+    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || 'Trader'}! 👋\n\n` + helpMsg);
+    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+
+  } catch (error) {
+    logger.error('Start command failed:', error);
+    await bot.sendMessage(
+      chatId,
+      '❌ Login failed. Please try again later or contact support.'
+    );
+  }
+});
+
+// Profile command
+bot.onText(/^\/profile$/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  if (!(await requireAuth(chatId))) return;
+
+  try {
+    const profile = await authService.getUserProfile(chatId);
+    const user = profile.user;
+    const stats = profile.stats;
+
+    let profileMsg = `👤 YOUR PROFILE\n`;
+    profileMsg += `\nName: ${user.telegram_first_name || 'N/A'}`;
+    if (user.telegram_username) profileMsg += `\nUsername: @${user.telegram_username}`;
+    profileMsg += `\nEmail: ${user.email || 'N/A'}`;
+    profileMsg += `\nPhone: ${user.phone || 'N/A'}`;
+    profileMsg += `\n\n📊 STATISTICS`;
+    profileMsg += `\nTotal Analyses: ${stats.total_analyses || 0}`;
+    profileMsg += `\nValid Setups: ${stats.valid_setups || 0}`;
+    profileMsg += `\nBuy Signals: ${stats.buy_signals || 0}`;
+    profileMsg += `\nSell Signals: ${stats.sell_signals || 0}`;
+    
+    if (stats.avg_confidence) {
+      profileMsg += `\nAvg Confidence: ${parseFloat(stats.avg_confidence).toFixed(1)}%`;
+    }
+    
+    if (stats.last_analysis) {
+      const lastAnalysis = new Date(stats.last_analysis);
+      profileMsg += `\nLast Analysis: ${lastAnalysis.toLocaleDateString()}`;
+    }
+    
+    profileMsg += `\n\nMember Since: ${new Date(user.created_at).toLocaleDateString()}`;
+    profileMsg += `\nLast Login: ${new Date(user.last_login).toLocaleDateString()}`;
+
+    await bot.sendMessage(chatId, profileMsg);
+  } catch (error) {
+    logger.error('Profile command failed:', error);
+    await bot.sendMessage(chatId, '❌ Failed to load profile. Please try again.');
+  }
+});
+
+// Logout command
+bot.onText(/^\/logout$/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  try {
+    await authService.logoutUser(chatId);
+    await bot.sendMessage(
+      chatId,
+      '👋 You have been logged out successfully.\n\nUse /start to login again.'
+    );
+    resetState(chatId);
+  } catch (error) {
+    logger.error('Logout command failed:', error);
+    await bot.sendMessage(chatId, '❌ Logout failed. Please try again.');
+  }
 });
 
 // Inline button flow
@@ -135,6 +296,14 @@ bot.on('callback_query', async (query) => {
   let data = query.data || '';
   const state = chatState.get(chatId) || { step: 'pair' };
   logger.info(`Callback received: ${data} (step=${state.step}, pair=${state.pair || '-'})`);
+
+  // Check authentication for all callback queries except cancel
+  if (data !== 'cancel') {
+    if (!(await requireAuth(chatId))) {
+      await bot.answerCallbackQuery(query.id, { text: 'Please login first with /start' });
+      return;
+    }
+  }
 
   // Show detailed analysis
   if (data === 'show_detailed') {
@@ -345,6 +514,27 @@ bot.on('callback_query', async (query) => {
 
       const result = combinedAnalysis;
 
+      // Log analysis to database
+      try {
+        const zone = result.daily_zone || result.primary_zone || {};
+        await database.logAnalysis(chatId, {
+          pair: state.pair,
+          strategy: strategy,
+          market_category: state.market,
+          signal: result.signal,
+          confidence: result.confidence ? result.confidence * 100 : null,
+          is_valid: result.valid,
+          trend: result.trend || result.micro_trend,
+          pattern: result.pattern,
+          zone_low: zone.price_low,
+          zone_high: zone.price_high
+        });
+        logger.info(`Analysis logged for user ${chatId}`);
+      } catch (dbError) {
+        logger.error('Failed to log analysis:', dbError);
+        // Continue anyway - don't fail the analysis because of logging
+      }
+
       // Build caption
       const statusLabel = result.signal.toUpperCase();
       const confidence = (result.confidence * 100).toFixed(1);
@@ -424,9 +614,14 @@ bot.on('callback_query', async (query) => {
 
 // Fallback for unknown commands
 bot.on('message', async (msg) => {
-  if (!/^\//.test(msg.text || '')) return;
-  if (/^\/(start)/.test(msg.text)) return;
-  await bot.sendMessage(msg.chat.id, 'Tap /start to begin analysis.');
+  const text = msg.text || '';
+  const chatId = msg.chat.id;
+  
+  // Only handle commands
+  if (!/^\//.test(text)) return;
+  if (/^\/(start|profile|logout)/.test(text)) return;
+  
+  await bot.sendMessage(chatId, 'Unknown command. Tap /start to begin analysis.');
 });
 
 // Helper functions
@@ -567,14 +762,16 @@ function retryKeyboard(pair, strategy, hasDetailedAnalysis) {
 }
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('Bot shutting down...');
   bot.stopPolling();
+  await database.close();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('Bot shutting down...');
   bot.stopPolling();
+  await database.close();
   process.exit(0);
 });
