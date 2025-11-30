@@ -27,7 +27,7 @@ DATABASE_URL=postgresql://user:password@host:5432/database?ssl=true
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 OPENAI_API_KEY=your_openai_api_key
 TWELVE_DATA_API_KEY=your_twelve_data_api_key
-WEB_REGISTRATION_URL=https://primusgpt.com/register
+WEB_REGISTRATION_URL=https://primusgpt-ai.vercel.app/register
 API_PORT=3000
 ```
 
@@ -184,7 +184,7 @@ curl -X POST https://your-api-url.vercel.app/api/auth/register \
 
 ### Test Web Registration
 
-1. Go to https://primusgpt.com/register
+1. Go to https://primusgpt-ai.vercel.app/register
 2. Fill in the registration form
 3. Check if data is saved to database
 
@@ -223,7 +223,7 @@ curl -X POST https://your-api-url.vercel.app/api/auth/register \
 ## Links
 
 - Vercel Dashboard: https://vercel.com/dashboard
-- Web App: https://primusgpt.com
+- Web App: https://primusgpt-ai.vercel.app
 - API (after deployment): https://your-api-url.vercel.app
 
 ## Support

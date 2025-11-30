@@ -67,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </a>
           </nav>
           <div className="header-actions">
-            <button className="btn btn-secondary text-sm desktop-only"><span>Sign In</span></button>
+            <a href="/register" className="btn btn-secondary text-sm desktop-only"><span>Get Started</span></a>
             <button 
               className="mobile-menu-toggle" 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -94,9 +94,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <a href="/register" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
             Register
           </a>
-          <button className="btn btn-primary mobile-nav-btn" onClick={() => setMobileMenuOpen(false)}>
-            <span>Sign In</span>
-          </button>
+          <a href="https://t.me/primusgpt_ai_bot" target="_blank" rel="noopener noreferrer" className="btn btn-primary mobile-nav-btn" onClick={() => setMobileMenuOpen(false)}>
+            <span>Try Telegram Bot</span>
+          </a>
         </nav>
       </div>
 

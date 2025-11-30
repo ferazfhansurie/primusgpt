@@ -11,6 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Import conversation modules
+import conversationManager from '../conversation/conversationManager.js';
+import analysisContextManager from '../conversation/analysisContext.js';
+import aiResponder from '../conversation/aiResponder.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -42,7 +47,9 @@ function resetState(chatId) {
     pair: null, 
     strategy: null, 
     market: null, 
-    processing: false
+    processing: false,
+    lastButtons: null,
+    lastButtonsMessage: 'Select market type:'
   });
 }
 
@@ -51,6 +58,15 @@ function getMarketCategories() {
     { name: 'Forex', key: 'forex' },
     { name: 'Gold', key: 'gold' }
   ];
+}
+
+// Helper function to send buttons and track them
+async function sendButtonsAndTrack(chatId, message, keyboard) {
+  const state = chatState.get(chatId) || {};
+  state.lastButtons = keyboard;
+  state.lastButtonsMessage = message;
+  chatState.set(chatId, state);
+  return await bot.sendMessage(chatId, message, keyboard);
 }
 
 function getInstruments(category) {
@@ -113,20 +129,8 @@ const helpMsg = `
 PRIMUS GPT - AI Trading Analyzer
 ========================================
 
-Supported Markets:
-- Forex: Major currency pairs
-- Gold: XAU/USD spot price
 
-Features:
-- Real-time market data
-- AI-powered analysis
-- Professional charts
-- Detailed validation
 
-Commands:
-/start - Start analysis
-/profile - View your profile & stats
-/logout - End your session
 `;
 
 // Middleware to check authentication
@@ -134,10 +138,19 @@ async function requireAuth(chatId, callback) {
   const isAuth = await authService.isAuthenticated(chatId);
   
   if (!isAuth) {
-    const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
+    const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
     await bot.sendMessage(
       chatId,
-      `🔒 Access Denied\n\nYou need to register first to use this bot.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, come back and use /start to login with your Telegram account.`
+      `ACCESS DENIED\n\nYou need to register first to use this service.\n\nAfter registration, use the Login button below to connect your Telegram account.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Register Now', url: registrationUrl }],
+            [{ text: 'Login', callback_data: 'start_login' }]
+          ]
+        }
+      }
     );
     return false;
   }
@@ -145,25 +158,101 @@ async function requireAuth(chatId, callback) {
   return true;
 }
 
-bot.onText(/^\/start$/, async (msg) => {
+bot.onText(/^\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const telegramUser = msg.from;
+  const text = msg.text || '';
 
   try {
+    // Save command to conversation
+    await conversationManager.saveMessage(chatId, 'user', text, { command: true });
+
+    // Check for email/phone in the message
+    const emailMatch = text.match(/Email:\s*([^\s\n]+@[^\s\n]+)/i);
+    const phoneMatch = text.match(/Phone:\s*(\+?\d[\d\s\-\(\)]+)/i);
+
+    // If credentials provided, try login with them
+    if (emailMatch || phoneMatch) {
+      try {
+        let user = null;
+
+        if (phoneMatch) {
+          // Try phone login first
+          let phoneNumber = phoneMatch[1].trim().replace(/[\s\-\(\)]/g, '');
+          if (!phoneNumber.startsWith('+')) {
+            phoneNumber = '+' + phoneNumber;
+          }
+          user = await database.getUserByPhone(phoneNumber);
+        }
+
+        if (!user && emailMatch) {
+          // Try email login
+          const email = emailMatch[1].trim().toLowerCase();
+          user = await database.getUserByEmail(email);
+        }
+
+        if (user) {
+          // Link telegram account and login
+          await database.updateUserTelegramIdById(user.id, chatId);
+          await authService.loginUser(chatId, {
+            username: telegramUser.username,
+            first_name: telegramUser.first_name,
+            last_name: telegramUser.last_name
+          });
+
+          const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+          if (fs.existsSync(welcomeStickerPath)) {
+            await bot.sendSticker(chatId, welcomeStickerPath);
+          }
+
+          resetState(chatId);
+          await bot.sendMessage(chatId, `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n` + helpMsg);
+          await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+          await database.logLoginAttempt(chatId, true, 'credentials_login');
+          return;
+        } else {
+          // Credentials provided but no user found
+          const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
+          await bot.sendMessage(
+            chatId,
+            'ACCOUNT NOT FOUND\n\nNo account found with the provided credentials.\n\nPlease verify your email/phone or register first.',
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: 'Register Now', url: registrationUrl }],
+                  [{ text: 'Login', callback_data: 'start_login' }]
+                ]
+              }
+            }
+          );
+          return;
+        }
+      } catch (error) {
+        logger.error('Credentials login failed:', error);
+        await bot.sendMessage(chatId, 'LOGIN FAILED\n\nPlease try again.');
+        return;
+      }
+    }
+
     // Check if user is already authenticated
     const isAuth = await authService.isAuthenticated(chatId);
     
     if (isAuth) {
       // User is already logged in, proceed to market selection
       resetState(chatId);
+      await conversationManager.updateState(chatId, 'market');
       
-      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+      const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
       if (fs.existsSync(welcomeStickerPath)) {
         await bot.sendSticker(chatId, welcomeStickerPath);
       }
       
-      await bot.sendMessage(chatId, 'Welcome back! 👋\n\n' + helpMsg);
-      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+      await bot.sendMessage(chatId, 'Welcome back.\n\n' + helpMsg);
+      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      
+      // Save bot response
+      await conversationManager.saveMessage(chatId, 'bot', 'Welcome back! Select market type.');
       return;
     }
 
@@ -172,18 +261,24 @@ bot.onText(/^\/start$/, async (msg) => {
     let user = await database.getUserByTelegramId(chatId);
     
     if (!user) {
-      // User doesn't exist or hasn't been linked yet - prompt for registration
-      const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
-      
-      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
-      if (fs.existsSync(welcomeStickerPath)) {
-        await bot.sendSticker(chatId, welcomeStickerPath);
-      }
-      
-      await bot.sendMessage(
+        // User doesn't exist or hasn't been linked yet - prompt for registration
+        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
+        
+        const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+        if (fs.existsSync(welcomeStickerPath)) {
+          await bot.sendSticker(chatId, welcomeStickerPath);
+        }      await bot.sendMessage(
         chatId,
-        `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, contact support to link your Telegram account with your registered email or phone number.`,
-        { parse_mode: 'Markdown' }
+        `Welcome to PRIMUS GPT\n\nACCOUNT NOT FOUND\n\nYou need to register on our website first, then return here to login.\n\nAfter registration, use the Login button below to connect your Telegram account.`,
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Register Now', url: registrationUrl }],
+              [{ text: 'Login', callback_data: 'start_login' }]
+            ]
+          }
+        }
       );
       
       await database.logLoginAttempt(chatId, false, 'unregistered_user');
@@ -197,22 +292,59 @@ bot.onText(/^\/start$/, async (msg) => {
       last_name: telegramUser.last_name
     });
 
-    const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+    const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
     if (fs.existsSync(welcomeStickerPath)) {
       await bot.sendSticker(chatId, welcomeStickerPath);
     }
 
     // Login successful - proceed to market selection
     resetState(chatId);
-    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}! 👋\n\n` + helpMsg);
-    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
+    await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
 
   } catch (error) {
     logger.error('Start command failed:', error);
     await bot.sendMessage(
       chatId,
-      '❌ Login failed. Please try again later or contact support.'
+      'LOGIN FAILED\n\nPlease try again later or contact support.'
     );
+  }
+});
+
+// Login command
+bot.onText(/^\/login$/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  try {
+    // Check if already authenticated
+    const isAuth = await authService.isAuthenticated(chatId);
+    
+    if (isAuth) {
+      await bot.sendMessage(chatId, '✅ You are already logged in!\n\nUse /profile to view your account or start analyzing markets.');
+      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      return;
+    }
+
+    // Save command to conversation
+    await conversationManager.saveMessage(chatId, 'user', '/login', { command: true });
+
+    // Request phone number (just text input, no incompatible button)
+    await bot.sendMessage(
+      chatId,
+      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567 (UAE)\n• +60123456789 (Malaysia)\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
+      {
+        parse_mode: 'Markdown'
+      }
+    );
+
+    // Set state to waiting for phone number
+    const state = chatState.get(chatId) || {};
+    state.waitingForPhone = true;
+    chatState.set(chatId, state);
+
+  } catch (error) {
+    logger.error('Login command failed:', error);
+    await bot.sendMessage(chatId, 'LOGIN FAILED\n\nPlease try again later.');
   }
 });
 
@@ -227,11 +359,11 @@ bot.onText(/^\/profile$/, async (msg) => {
     const user = profile.user;
     const stats = profile.stats;
 
-    let profileMsg = `👤 YOUR PROFILE\n`;
+    let profileMsg = `YOUR PROFILE\n`;
     profileMsg += `\nName: ${user.telegram_first_name || user.first_name || 'N/A'}`;
     profileMsg += `\nEmail: ${user.email || 'N/A'}`;
     profileMsg += `\nPhone: ${user.phone || 'N/A'}`;
-    profileMsg += `\n\n📊 STATISTICS`;
+    profileMsg += `\n\nSTATISTICS`;
     profileMsg += `\nTotal Analyses: ${stats.total_analyses || 0}`;
     profileMsg += `\nValid Setups: ${stats.valid_setups || 0}`;
     profileMsg += `\nBuy Signals: ${stats.buy_signals || 0}`;
@@ -252,7 +384,7 @@ bot.onText(/^\/profile$/, async (msg) => {
     await bot.sendMessage(chatId, profileMsg);
   } catch (error) {
     logger.error('Profile command failed:', error);
-    await bot.sendMessage(chatId, '❌ Failed to load profile. Please try again.');
+    await bot.sendMessage(chatId, 'Failed to load profile. Please try again.');
   }
 });
 
@@ -261,15 +393,31 @@ bot.onText(/^\/logout$/, async (msg) => {
   const chatId = msg.chat.id;
 
   try {
+    // Save command to conversation
+    await conversationManager.saveMessage(chatId, 'user', '/logout', { command: true });
+    
+    // Check if user is authenticated
+    const isAuth = await authService.isAuthenticated(chatId);
+    
+    if (!isAuth) {
+      await bot.sendMessage(chatId, 'You are already logged out.\n\nUse /start to login.');
+      return;
+    }
+
+    // Logout user
     await authService.logoutUser(chatId);
+    
     await bot.sendMessage(
       chatId,
-      '👋 You have been logged out successfully.\n\nUse /start to login again.'
+      'You have been logged out successfully.\n\nUse /start to login again.'
     );
+    
     resetState(chatId);
+    
+    logger.info(`User ${chatId} logged out successfully`);
   } catch (error) {
     logger.error('Logout command failed:', error);
-    await bot.sendMessage(chatId, '❌ Logout failed. Please try again.');
+    await bot.sendMessage(chatId, 'Logout failed. Please try again.');
   }
 });
 
@@ -280,8 +428,8 @@ bot.on('callback_query', async (query) => {
   const state = chatState.get(chatId) || { step: 'pair' };
   logger.info(`Callback received: ${data} (step=${state.step}, pair=${state.pair || '-'})`);
 
-  // Check authentication for all callback queries except cancel
-  if (data !== 'cancel') {
+  // Check authentication for all callback queries except cancel and start_login
+  if (data !== 'cancel' && data !== 'start_login') {
     if (!(await requireAuth(chatId))) {
       await bot.answerCallbackQuery(query.id, { text: 'Please login first with /start' });
       return;
@@ -321,7 +469,7 @@ bot.on('callback_query', async (query) => {
   if (data === 'back_to_menu') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Back to menu' });
-    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
     return;
   }
 
@@ -329,7 +477,34 @@ bot.on('callback_query', async (query) => {
   if (data === 'cancel') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Cancelled' });
-    await bot.sendMessage(chatId, 'Cancelled. Select market type:', marketCategoryKeyboard());
+    await sendButtonsAndTrack(chatId, 'Cancelled. Select market type:', marketCategoryKeyboard());
+    return;
+  }
+
+  // Start login flow
+  if (data === 'start_login') {
+    await bot.answerCallbackQuery(query.id);
+    
+    // Check if already authenticated
+    const isAuth = await authService.isAuthenticated(chatId);
+    
+    if (isAuth) {
+      await bot.sendMessage(chatId, '✅ You are already logged in!\n\nUse /profile to view your account or start analyzing markets.');
+      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      return;
+    }
+    
+    // Request phone number (same as /login command)
+    await bot.sendMessage(
+      chatId,
+      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567 (UAE)\n• +60123456789 (Malaysia)\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
+      { parse_mode: 'Markdown' }
+    );
+    
+    // Set state to waiting for phone number
+    const state = chatState.get(chatId) || {};
+    state.waitingForPhone = true;
+    chatState.set(chatId, state);
     return;
   }
 
@@ -349,13 +524,17 @@ bot.on('callback_query', async (query) => {
     const market = data.split(':')[1];
     state.market = market;
     
+    // Update conversation state
+    await conversationManager.updateState(chatId, 'pair');
+    
     // If gold, skip pair selection and go straight to strategy
     if (market === 'gold') {
       state.pair = 'XAU/USD';
       state.step = 'strategy';
       chatState.set(chatId, state);
+      await conversationManager.updateState(chatId, 'strategy');
       await bot.answerCallbackQuery(query.id);
-      await bot.sendMessage(chatId, 'Gold (XAU/USD) - Choose strategy:', strategyKeyboard());
+      await sendButtonsAndTrack(chatId, 'Gold (XAU/USD) - Choose strategy:', strategyKeyboard());
       return;
     }
     
@@ -363,7 +542,7 @@ bot.on('callback_query', async (query) => {
     state.step = 'pair';
     chatState.set(chatId, state);
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Select Forex pair:', instrumentsKeyboard(market));
+    await sendButtonsAndTrack(chatId, 'Select Forex pair:', instrumentsKeyboard(market));
     return;
   }
 
@@ -373,8 +552,9 @@ bot.on('callback_query', async (query) => {
     state.pair = pair;
     state.step = 'strategy';
     chatState.set(chatId, state);
+    await conversationManager.updateState(chatId, 'strategy');
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Choose strategy:', strategyKeyboard());
+    await sendButtonsAndTrack(chatId, 'Choose strategy:', strategyKeyboard());
     return;
   }
 
@@ -500,7 +680,7 @@ bot.on('callback_query', async (query) => {
       // Log analysis to database
       try {
         const zone = result.daily_zone || result.primary_zone || {};
-        await database.logAnalysis(chatId, {
+        const analysisRecord = await database.logAnalysis(chatId, {
           pair: state.pair,
           strategy: strategy,
           market_category: state.market,
@@ -513,6 +693,21 @@ bot.on('callback_query', async (query) => {
           zone_high: zone.price_high
         });
         logger.info(`Analysis logged for user ${chatId}`);
+
+        // Save analysis reference for AI context
+        if (analysisRecord && analysisRecord.id) {
+          await analysisContextManager.saveAnalysisForUser(
+            chatId,
+            analysisRecord.id,
+            {
+              pair: state.pair,
+              strategy: strategy,
+              result: result,
+              timestamp: new Date().toISOString()
+            }
+          );
+          logger.info(`Analysis context saved for AI`);
+        }
       } catch (dbError) {
         logger.error('Failed to log analysis:', dbError);
         // Continue anyway - don't fail the analysis because of logging
@@ -595,22 +790,91 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// Fallback for any message - auto-start if not authenticated
+// Fallback for any message - AI response or auto-start if not authenticated
 bot.on('message', async (msg) => {
   const text = msg.text || '';
   const chatId = msg.chat.id;
   
   // Ignore if it's a command we already handle
-  if (/^\/(start|profile|logout)/.test(text)) return;
+  if (/^\/(start|profile|logout|login)/.test(text)) return;
   
   // Ignore callback queries
   if (msg.chat.type === 'private' && !text) return;
+
+  // Check if waiting for phone number input
+  const state = chatState.get(chatId) || {};
+  if (state.waitingForPhone && text) {
+    try {
+      // Clean phone number (remove spaces, dashes, etc.)
+      let phoneNumber = text.trim().replace(/[\s\-\(\)]/g, '');
+      
+      // Add + if not present
+      if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+' + phoneNumber;
+      }
+
+      // Find user by phone number
+      const user = await database.getUserByPhone(phoneNumber);
+      
+      if (!user) {
+        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
+        await bot.sendMessage(
+          chatId,
+          'ACCOUNT NOT FOUND\n\nNo account found with this phone number.\n\nPlease verify your number and try again, or register first.',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Register Now', url: registrationUrl }],
+                [{ text: 'Login', callback_data: 'start_login' }]
+              ]
+            }
+          }
+        );
+        state.waitingForPhone = false;
+        chatState.set(chatId, state);
+        return;
+      }
+
+      // Update user's telegram_id
+      await database.updateUserTelegramIdById(user.id, chatId);
+
+      // Login user
+      await authService.loginUser(chatId, {
+        username: msg.from.username,
+        first_name: msg.from.first_name,
+        last_name: msg.from.last_name
+      });
+
+      // Clear waiting state
+      state.waitingForPhone = false;
+      chatState.set(chatId, state);
+      resetState(chatId);
+
+      // Send success message
+      await bot.sendMessage(
+        chatId,
+        `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n${helpMsg}`
+      );
+      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      
+      await database.logLoginAttempt(chatId, true, 'phone_login');
+      return;
+
+    } catch (error) {
+      logger.error('Phone login failed:', error);
+      await bot.sendMessage(chatId, 'LOGIN FAILED\n\nPlease try again with /login');
+      state.waitingForPhone = false;
+      chatState.set(chatId, state);
+      return;
+    }
+  }
   
   // Check if user is authenticated
   const isAuth = await authService.isAuthenticated(chatId);
   
   if (!isAuth) {
-    // Auto-trigger start flow for any message
+    // Auto-trigger start flow for any message (existing logic)
     const telegramUser = msg.from;
     
     try {
@@ -619,17 +883,25 @@ bot.on('message', async (msg) => {
       
       if (!user) {
         // User doesn't exist - prompt for registration
-        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
+        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
         
-        const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+        const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
         if (fs.existsSync(welcomeStickerPath)) {
           await bot.sendSticker(chatId, welcomeStickerPath);
         }
         
         await bot.sendMessage(
           chatId,
-          `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, contact support to link your Telegram account with your registered email or phone number.`,
-          { parse_mode: 'Markdown' }
+          `Welcome to PRIMUS GPT\n\nACCOUNT NOT FOUND\n\nYou need to register on our website first, then return here to login.\n\nAfter registration, use the Login button below to connect your Telegram account.`,
+          { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Register Now', url: registrationUrl }],
+                [{ text: 'Login', callback_data: 'start_login' }]
+              ]
+            }
+          }
         );
         
         await database.logLoginAttempt(chatId, false, 'unregistered_user');
@@ -643,30 +915,95 @@ bot.on('message', async (msg) => {
         last_name: telegramUser.last_name
       });
 
-      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+      const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
       if (fs.existsSync(welcomeStickerPath)) {
         await bot.sendSticker(chatId, welcomeStickerPath);
       }
 
       // Auto-login successful - show menu
       resetState(chatId);
-      await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}! 👋\n\n` + helpMsg);
+      await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
       await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
       
     } catch (error) {
       logger.error('Auto-start failed:', error);
       await bot.sendMessage(
         chatId,
-        '❌ Something went wrong. Please try sending /start'
+        'An error occurred. Please try sending /start'
       );
     }
   } else {
-    // User is authenticated but sent unknown command
-    if (/^\//.test(text)) {
-      await bot.sendMessage(chatId, 'Unknown command. Use the menu buttons or send /start to begin analysis.');
-    } else {
-      // Regular message - show menu
-      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    // ===== NEW: AI-POWERED TEXT MESSAGE HANDLER =====
+    // User is authenticated and sent a text message (not a command or button)
+    
+    try {
+      // Double-check user still exists in database (in case they were deleted)
+      const user = await database.getUserByTelegramId(chatId);
+      
+      if (!user) {
+        // User was deleted from database - log them out and show registration
+        await authService.logoutUser(chatId);
+        
+        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
+        await bot.sendMessage(
+          chatId,
+          `Welcome to PRIMUS GPT\n\nACCOUNT NOT FOUND\n\nYou need to register on our website first, then return here to login.\n\nAfter registration, use the Login button below to connect your Telegram account.`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Register Now', url: registrationUrl }],
+                [{ text: 'Login', callback_data: 'start_login' }]
+              ]
+            }
+          }
+        );
+        return;
+      }
+      
+      // Save user message to conversation history
+      await conversationManager.saveMessage(chatId, 'user', text);
+      
+      // Show typing indicator
+      await bot.sendChatAction(chatId, 'typing');
+      
+      // Generate AI response with full context
+      const aiResponse = await aiResponder.respondToMessage(chatId, text);
+      
+      // Send AI response
+      await bot.sendMessage(chatId, aiResponse);
+      
+      // Save bot response to conversation history
+      await conversationManager.saveMessage(chatId, 'bot', aiResponse);
+      
+      logger.info(`AI response sent to ${chatId}`);
+      
+      // Send the last buttons that were shown (or default to market selection)
+      const state = chatState.get(chatId) || {};
+      const buttonsToSend = state.lastButtons || marketCategoryKeyboard();
+      const buttonMessage = state.lastButtonsMessage || 'Select market type:';
+      await bot.sendMessage(chatId, buttonMessage, buttonsToSend);
+      
+    } catch (error) {
+      logger.error('AI response failed:', error);
+      
+      // Fallback: guide to buttons and show last buttons
+      await bot.sendMessage(
+        chatId,
+        `I had trouble understanding that. Here's what you can do:
+
+• Use the buttons below to start a trading analysis
+• Type /profile to see your statistics
+• Ask me questions about trading
+
+How can I help you?`
+      );
+      
+      // Send last buttons even on error (or default to market selection)
+      const state = chatState.get(chatId) || {};
+      const buttonsToSend = state.lastButtons || marketCategoryKeyboard();
+      const buttonMessage = state.lastButtonsMessage || 'Select market type:';
+      await bot.sendMessage(chatId, buttonMessage, buttonsToSend);
     }
   }
 });

@@ -7,7 +7,7 @@ The authentication system now uses **email and phone number** as primary identif
 ## Registration Flow
 
 ### 1. Web Registration (Required First Step)
-Users must register on the website first at `https://primusgpt.com/register`
+Users must register on the website first at `https://primusgpt-ai.vercel.app/register`
 
 **Required Fields:**
 - ✅ Email (unique)

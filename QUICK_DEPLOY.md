@@ -54,7 +54,7 @@ DATABASE_URL = postgresql://user:password@host/db?ssl=true
 TELEGRAM_BOT_TOKEN = your_bot_token
 OPENAI_API_KEY = your_openai_key
 TWELVE_DATA_API_KEY = your_twelve_data_key
-WEB_REGISTRATION_URL = https://primusgpt.com/register
+WEB_REGISTRATION_URL = https://primusgpt-ai.vercel.app/register
 API_PORT = 3000
 ```
 
@@ -158,7 +158,7 @@ Should return:
 ```
 
 ### 2. Test Web Registration
-- Go to https://primusgpt.com/register
+- Go to https://primusgpt-ai.vercel.app/register
 - Fill in email, phone, first name
 - Submit
 - Should show success message

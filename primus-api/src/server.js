@@ -24,7 +24,7 @@ const allowedOrigins = [
   'http://localhost:3000',  // Local frontend
   'http://localhost:5174',  // Alternative Vite port
   process.env.WEB_URL,      // Production URL
-  'https://primusgpt.com',  // Production domain
+  'https://primusgpt-ai.vercel.app',  // Production domain
   'https://primusgpt-ai.vercel.app'  // Vercel deployment
 ].filter(Boolean);
 

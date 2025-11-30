@@ -18,10 +18,12 @@ const CTA: React.FC = () => {
           </p>
           
           <div className="cta-buttons">
-            <button className="btn btn-primary btn-large">
-              <span>Start Free on Telegram</span>
-            </button>
-           
+            <a href="/register" className="btn btn-primary btn-large">
+              <span>Start Free Trial</span>
+            </a>
+            <a href="https://t.me/primusgpt_ai_bot" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-large">
+              <span>Open Telegram Bot</span>
+            </a>
           </div>
 
           <div className="cta-features">

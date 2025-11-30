@@ -31,8 +31,8 @@ const Hero: React.FC = () => {
         </p>
 
         <div className="cta-group flex gap-4">
-          <button className="btn btn-primary"><span>Start Trading Now</span></button>
-
+          <a href="/register" className="btn btn-primary"><span>Start Trading Now</span></a>
+          <a href="https://t.me/primusgpt_ai_bot" target="_blank" rel="noopener noreferrer" className="btn btn-secondary"><span>Try on Telegram</span></a>
         </div>
       </div>
 

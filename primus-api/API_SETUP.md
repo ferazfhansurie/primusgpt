@@ -57,8 +57,8 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 BOT_TOKEN=your_bot_token_here  # Alternative name for compatibility
 
 # Web Registration
-WEB_REGISTRATION_URL=https://primusgpt.com/register
-WEB_URL=https://primusgpt.com
+WEB_REGISTRATION_URL=https://primusgpt-ai.vercel.app/register
+WEB_URL=https://primusgpt-ai.vercel.app
 
 # API Server
 API_PORT=3000

@@ -228,6 +228,20 @@ class Database {
   }
 
   /**
+   * Update user's telegram_id by user ID
+   */
+  async updateUserTelegramIdById(userId, telegramId) {
+    const query = `
+      UPDATE users 
+      SET telegram_id = $1, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $2
+      RETURNING *;
+    `;
+    const result = await this.query(query, [telegramId, userId]);
+    return result.rows[0];
+  }
+
+  /**
    * Update last login time
    */
   async updateLastLogin(telegramId) {
@@ -388,6 +402,297 @@ class Database {
     `;
     const result = await this.query(query, [telegramId, success, attemptType]);
     return result.rows[0];
+  }
+
+  // ============================================
+  // CONVERSATION METHODS
+  // ============================================
+
+  /**
+   * Save a conversation message
+   */
+  async saveConversationMessage(telegramId, messageType, content, metadata = {}) {
+    const query = `
+      INSERT INTO conversations (telegram_id, message_type, content, metadata)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *;
+    `;
+    const result = await this.query(query, [telegramId, messageType, content, JSON.stringify(metadata)]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get recent conversation history
+   */
+  async getConversationHistory(telegramId, limit = 10) {
+    const query = `
+      SELECT * FROM conversations 
+      WHERE telegram_id = $1 
+      ORDER BY created_at DESC 
+      LIMIT $2;
+    `;
+    const result = await this.query(query, [telegramId, limit]);
+    return result.rows.reverse(); // Return in chronological order
+  }
+
+  /**
+   * Get all conversations (for admin dashboard)
+   */
+  async getAllConversations(limit = 100, offset = 0) {
+    const query = `
+      SELECT 
+        c.*,
+        u.telegram_first_name,
+        u.telegram_username,
+        u.email
+      FROM conversations c
+      LEFT JOIN users u ON c.telegram_id = u.telegram_id
+      ORDER BY c.created_at DESC
+      LIMIT $1 OFFSET $2;
+    `;
+    const result = await this.query(query, [limit, offset]);
+    return result.rows;
+  }
+
+  /**
+   * Get or create conversation session
+   */
+  async getConversationSession(telegramId) {
+    let query = 'SELECT * FROM conversation_sessions WHERE telegram_id = $1';
+    let result = await this.query(query, [telegramId]);
+    
+    if (result.rows.length === 0) {
+      // Create new session
+      query = `
+        INSERT INTO conversation_sessions (telegram_id, current_state, context)
+        VALUES ($1, $2, $3)
+        RETURNING *;
+      `;
+      result = await this.query(query, [telegramId, null, JSON.stringify({})]);
+    }
+    
+    return result.rows[0];
+  }
+
+  /**
+   * Update conversation session
+   */
+  async updateConversationSession(telegramId, updates) {
+    const { current_state, context, message_count } = updates;
+    const query = `
+      UPDATE conversation_sessions
+      SET 
+        current_state = COALESCE($2, current_state),
+        context = COALESCE($3, context),
+        message_count = COALESCE($4, message_count),
+        last_activity = CURRENT_TIMESTAMP
+      WHERE telegram_id = $1
+      RETURNING *;
+    `;
+    const result = await this.query(query, [
+      telegramId,
+      current_state,
+      context ? JSON.stringify(context) : null,
+      message_count
+    ]);
+    return result.rows[0];
+  }
+
+  /**
+   * Save analysis reference for AI context
+   */
+  async saveAnalysisReference(telegramId, analysisId, fullAnalysis) {
+    // Generate unique reference key
+    const referenceKey = `A${Date.now()}${Math.random().toString(36).substr(2, 5)}`.toUpperCase();
+    
+    // Deactivate previous references for this user (keep only last 5 active)
+    await this.query(`
+      UPDATE analysis_references
+      SET is_active = false
+      WHERE telegram_id = $1
+      AND id NOT IN (
+        SELECT id FROM analysis_references
+        WHERE telegram_id = $1 AND is_active = true
+        ORDER BY created_at DESC
+        LIMIT 4
+      )
+    `, [telegramId]);
+
+    const query = `
+      INSERT INTO analysis_references (telegram_id, analysis_id, reference_key, full_analysis)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *;
+    `;
+    const result = await this.query(query, [
+      telegramId,
+      analysisId,
+      referenceKey,
+      JSON.stringify(fullAnalysis)
+    ]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get last analysis reference for user
+   */
+  async getLastAnalysisReference(telegramId) {
+    const query = `
+      SELECT * FROM analysis_references
+      WHERE telegram_id = $1 AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `;
+    const result = await this.query(query, [telegramId]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Get analysis by reference key
+   */
+  async getAnalysisByReference(referenceKey) {
+    const query = 'SELECT * FROM analysis_references WHERE reference_key = $1';
+    const result = await this.query(query, [referenceKey]);
+    return result.rows[0] || null;
+  }
+
+  // ============================================
+  // AI GUIDELINES METHODS
+  // ============================================
+
+  /**
+   * Get all active guidelines
+   */
+  async getActiveGuidelines(type = null) {
+    let query = 'SELECT * FROM ai_guidelines WHERE is_active = true';
+    const params = [];
+    
+    if (type) {
+      query += ' AND guideline_type = $1';
+      params.push(type);
+    }
+    
+    query += ' ORDER BY priority ASC, created_at ASC';
+    const result = await this.query(query, params);
+    return result.rows;
+  }
+
+  /**
+   * Get guideline by key
+   */
+  async getGuideline(key) {
+    const query = 'SELECT * FROM ai_guidelines WHERE guideline_key = $1';
+    const result = await this.query(query, [key]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Upsert guideline
+   */
+  async upsertGuideline(key, type, content, priority = 0, createdBy = null) {
+    const query = `
+      INSERT INTO ai_guidelines (guideline_key, guideline_type, content, priority, created_by)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (guideline_key)
+      DO UPDATE SET
+        content = EXCLUDED.content,
+        priority = EXCLUDED.priority,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *;
+    `;
+    const result = await this.query(query, [key, type, content, priority, createdBy]);
+    return result.rows[0];
+  }
+
+  /**
+   * Toggle guideline active status
+   */
+  async toggleGuideline(key, isActive) {
+    const query = `
+      UPDATE ai_guidelines
+      SET is_active = $2, updated_at = CURRENT_TIMESTAMP
+      WHERE guideline_key = $1
+      RETURNING *;
+    `;
+    const result = await this.query(query, [key, isActive]);
+    return result.rows[0];
+  }
+
+  // ============================================
+  // ADMIN USER METHODS
+  // ============================================
+
+  /**
+   * Create admin user
+   */
+  async createAdminUser(username, passwordHash, email, role = 'admin') {
+    const query = `
+      INSERT INTO admin_users (username, password_hash, email, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, username, email, role, is_active, created_at;
+    `;
+    const result = await this.query(query, [username, passwordHash, email, role]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get admin user by username
+   */
+  async getAdminByUsername(username) {
+    const query = 'SELECT * FROM admin_users WHERE username = $1 AND is_active = true';
+    const result = await this.query(query, [username]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Create admin session
+   */
+  async createAdminSession(adminId, sessionToken, expiresInDays = 7) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+    const query = `
+      INSERT INTO admin_sessions (admin_id, session_token, expires_at)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+    `;
+    const result = await this.query(query, [adminId, sessionToken, expiresAt]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get admin session
+   */
+  async getAdminSession(sessionToken) {
+    const query = `
+      SELECT s.*, a.username, a.email, a.role
+      FROM admin_sessions s
+      JOIN admin_users a ON s.admin_id = a.id
+      WHERE s.session_token = $1 
+      AND s.expires_at > CURRENT_TIMESTAMP
+      AND a.is_active = true;
+    `;
+    const result = await this.query(query, [sessionToken]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Delete admin session
+   */
+  async deleteAdminSession(sessionToken) {
+    const query = 'DELETE FROM admin_sessions WHERE session_token = $1';
+    await this.query(query, [sessionToken]);
+  }
+
+  /**
+   * Update admin last login
+   */
+  async updateAdminLastLogin(adminId) {
+    const query = `
+      UPDATE admin_users
+      SET last_login = CURRENT_TIMESTAMP
+      WHERE id = $1;
+    `;
+    await this.query(query, [adminId]);
   }
 }
 
