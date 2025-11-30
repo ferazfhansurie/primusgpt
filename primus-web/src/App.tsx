@@ -51,7 +51,7 @@ function App() {
       {isLoading && <LoadingScreen onLoadingComplete={handleLoadingComplete} />}
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/register" element={<Register />} />
+        <Route path="/register" element={<Layout><Register /></Layout>} />
       </Routes>
     </>
   );

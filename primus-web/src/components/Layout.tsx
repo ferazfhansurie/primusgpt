@@ -45,6 +45,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <a href="#how-it-works" className="nav-link">
               <span>How It Works</span>
             </a>
+            <a href="/register" className="nav-link">
+              <span>Register</span>
+            </a>
           </nav>
           <div className="header-actions">
             <button className="btn btn-secondary text-sm desktop-only"><span>Sign In</span></button>
@@ -70,6 +73,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </a>
           <a href="#how-it-works" className="mobile-nav-link" onClick={handleNavClick}>
             How It Works
+          </a>
+          <a href="/register" className="mobile-nav-link" onClick={handleNavClick}>
+            Register
           </a>
           <button className="btn btn-primary mobile-nav-btn" onClick={handleNavClick}>
             <span>Sign In</span>
