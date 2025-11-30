@@ -595,16 +595,80 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// Fallback for unknown commands
+// Fallback for any message - auto-start if not authenticated
 bot.on('message', async (msg) => {
   const text = msg.text || '';
   const chatId = msg.chat.id;
   
-  // Only handle commands
-  if (!/^\//.test(text)) return;
+  // Ignore if it's a command we already handle
   if (/^\/(start|profile|logout)/.test(text)) return;
   
-  await bot.sendMessage(chatId, 'Unknown command. Tap /start to begin analysis.');
+  // Ignore callback queries
+  if (msg.chat.type === 'private' && !text) return;
+  
+  // Check if user is authenticated
+  const isAuth = await authService.isAuthenticated(chatId);
+  
+  if (!isAuth) {
+    // Auto-trigger start flow for any message
+    const telegramUser = msg.from;
+    
+    try {
+      // Check if user exists in database
+      let user = await database.getUserByTelegramId(chatId);
+      
+      if (!user) {
+        // User doesn't exist - prompt for registration
+        const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
+        
+        const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+        if (fs.existsSync(welcomeStickerPath)) {
+          await bot.sendSticker(chatId, welcomeStickerPath);
+        }
+        
+        await bot.sendMessage(
+          chatId,
+          `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, contact support to link your Telegram account with your registered email or phone number.`,
+          { parse_mode: 'Markdown' }
+        );
+        
+        await database.logLoginAttempt(chatId, false, 'unregistered_user');
+        return;
+      }
+
+      // User exists - create session and auto-login
+      await authService.loginUser(chatId, {
+        username: telegramUser.username,
+        first_name: telegramUser.first_name,
+        last_name: telegramUser.last_name
+      });
+
+      const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
+      if (fs.existsSync(welcomeStickerPath)) {
+        await bot.sendSticker(chatId, welcomeStickerPath);
+      }
+
+      // Auto-login successful - show menu
+      resetState(chatId);
+      await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}! 👋\n\n` + helpMsg);
+      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+      
+    } catch (error) {
+      logger.error('Auto-start failed:', error);
+      await bot.sendMessage(
+        chatId,
+        '❌ Something went wrong. Please try sending /start'
+      );
+    }
+  } else {
+    // User is authenticated but sent unknown command
+    if (/^\//.test(text)) {
+      await bot.sendMessage(chatId, 'Unknown command. Use the menu buttons or send /start to begin analysis.');
+    } else {
+      // Regular message - show menu
+      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    }
+  }
 });
 
 // Helper functions
