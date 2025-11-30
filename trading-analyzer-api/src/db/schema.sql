@@ -2,11 +2,13 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     telegram_id BIGINT UNIQUE,
-    telegram_username VARCHAR(255) UNIQUE NOT NULL,
+    telegram_username VARCHAR(255),
     telegram_first_name VARCHAR(255),
     telegram_last_name VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(50),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone VARCHAR(50) UNIQUE NOT NULL,
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -53,7 +55,8 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
-CREATE INDEX IF NOT EXISTS idx_users_telegram_username ON users(telegram_username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_analysis_telegram_id ON analysis_history(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON analysis_history(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_telegram_id ON user_sessions(telegram_id);

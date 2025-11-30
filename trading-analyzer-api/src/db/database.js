@@ -164,7 +164,7 @@ class Database {
   }
 
   /**
-   * Get user by telegram username
+   * Get user by telegram username (kept for backward compatibility)
    */
   async getUserByUsername(username) {
     // Remove @ if present
@@ -175,17 +175,55 @@ class Database {
   }
 
   /**
-   * Update user's telegram_id after first bot interaction
+   * Get user by email
    */
-  async updateUserTelegramId(username, telegramId) {
-    const cleanUsername = username.replace('@', '');
-    const query = `
-      UPDATE users 
-      SET telegram_id = $1, updated_at = CURRENT_TIMESTAMP 
-      WHERE telegram_username = $2
-      RETURNING *;
-    `;
-    const result = await this.query(query, [telegramId, cleanUsername]);
+  async getUserByEmail(email) {
+    const query = 'SELECT * FROM users WHERE email = $1 AND is_active = true';
+    const result = await this.query(query, [email]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Get user by phone
+   */
+  async getUserByPhone(phone) {
+    const query = 'SELECT * FROM users WHERE phone = $1 AND is_active = true';
+    const result = await this.query(query, [phone]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Update user's telegram_id after first bot interaction (using email or phone)
+   */
+  async updateUserTelegramId(identifier, telegramId, identifierType = 'email') {
+    let query;
+    if (identifierType === 'email') {
+      query = `
+        UPDATE users 
+        SET telegram_id = $1, updated_at = CURRENT_TIMESTAMP 
+        WHERE email = $2
+        RETURNING *;
+      `;
+    } else if (identifierType === 'phone') {
+      query = `
+        UPDATE users 
+        SET telegram_id = $1, updated_at = CURRENT_TIMESTAMP 
+        WHERE phone = $2
+        RETURNING *;
+      `;
+    } else {
+      // Backward compatibility for username
+      const cleanUsername = identifier.replace('@', '');
+      query = `
+        UPDATE users 
+        SET telegram_id = $1, updated_at = CURRENT_TIMESTAMP 
+        WHERE telegram_username = $2
+        RETURNING *;
+      `;
+      const result = await this.query(query, [telegramId, cleanUsername]);
+      return result.rows[0];
+    }
+    const result = await this.query(query, [telegramId, identifier]);
     return result.rows[0];
   }
 

@@ -24,25 +24,42 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }, [mobileMenuOpen]);
 
-  const handleNavClick = () => {
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     setMobileMenuOpen(false);
+    
+    // If it's a hash link and we're on the home page, smooth scroll
+    if (href.startsWith('#')) {
+      e.preventDefault();
+      const element = document.querySelector(href);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        // If element not found, navigate to home first then scroll
+        window.location.href = '/' + href;
+      }
+    }
+  };
+
+  const handleLogoClick = () => {
+    setMobileMenuOpen(false);
+    window.location.href = '/';
   };
 
   return (
     <div className="app-wrapper">
       <header className={`header ${scrolled ? 'scrolled' : ''}`}>
         <div className="container flex items-center justify-between">
-          <div className="logo">
+          <div className="logo" onClick={handleLogoClick}>
             <img src="/logo.jpg" alt="Primus GPT" className="logo-img" />
           </div>
           <nav className="nav-links desktop-nav">
-            <a href="#features" className="nav-link">
+            <a href="#features" className="nav-link" onClick={(e) => handleNavClick(e, '#features')}>
               <span>Features</span>
             </a>
-            <a href="#markets" className="nav-link">
+            <a href="#markets" className="nav-link" onClick={(e) => handleNavClick(e, '#markets')}>
               <span>Markets</span>
             </a>
-            <a href="#how-it-works" className="nav-link">
+            <a href="#how-it-works" className="nav-link" onClick={(e) => handleNavClick(e, '#how-it-works')}>
               <span>How It Works</span>
             </a>
             <a href="/register" className="nav-link">
@@ -65,19 +82,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Mobile Menu Overlay */}
       <div className={`mobile-menu ${mobileMenuOpen ? 'open' : ''}`}>
         <nav className="mobile-nav">
-          <a href="#features" className="mobile-nav-link" onClick={handleNavClick}>
+          <a href="#features" className="mobile-nav-link" onClick={(e) => handleNavClick(e, '#features')}>
             Features
           </a>
-          <a href="#markets" className="mobile-nav-link" onClick={handleNavClick}>
+          <a href="#markets" className="mobile-nav-link" onClick={(e) => handleNavClick(e, '#markets')}>
             Markets
           </a>
-          <a href="#how-it-works" className="mobile-nav-link" onClick={handleNavClick}>
+          <a href="#how-it-works" className="mobile-nav-link" onClick={(e) => handleNavClick(e, '#how-it-works')}>
             How It Works
           </a>
-          <a href="/register" className="mobile-nav-link" onClick={handleNavClick}>
+          <a href="/register" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
             Register
           </a>
-          <button className="btn btn-primary mobile-nav-btn" onClick={handleNavClick}>
+          <button className="btn btn-primary mobile-nav-btn" onClick={() => setMobileMenuOpen(false)}>
             <span>Sign In</span>
           </button>
         </nav>

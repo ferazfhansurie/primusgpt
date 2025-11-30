@@ -167,21 +167,12 @@ bot.onText(/^\/start$/, async (msg) => {
       return;
     }
 
-    // Check if user has a username
-    if (!telegramUser.username) {
-      await bot.sendMessage(
-        chatId,
-        `❌ Username Required\n\nYou need to set a Telegram username to use this bot.\n\nHow to set a username:\n1. Open Telegram Settings\n2. Tap on your profile\n3. Tap "Username"\n4. Create a username\n\nAfter setting your username, use /start again.`
-      );
-      await database.logLoginAttempt(chatId, false, 'no_username');
-      return;
-    }
-
-    // Check if user exists in database (registered via web with username)
-    let user = await database.getUserByUsername(telegramUser.username);
+    // Check if user exists in database (registered via web)
+    // User needs to have registered via web first
+    let user = await database.getUserByTelegramId(chatId);
     
     if (!user) {
-      // User not registered
+      // User doesn't exist or hasn't been linked yet - prompt for registration
       const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt.com/register';
       
       const welcomeStickerPath = path.join(__dirname, '../../welcome.webp');
@@ -191,19 +182,12 @@ bot.onText(/^\/start$/, async (msg) => {
       
       await bot.sendMessage(
         chatId,
-        `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nYour Telegram Username: @${telegramUser.username}\n\nPlease use this username during registration.\n\nAfter registration, come back here and use /start to login.`,
+        `🎉 Welcome to PRIMUS GPT!\n\n❌ Account Not Found\n\nYou need to register on our website first.\n\n👉 Register here: ${registrationUrl}\n\nAfter registration, contact support to link your Telegram account with your registered email or phone number.`,
         { parse_mode: 'Markdown' }
       );
       
       await database.logLoginAttempt(chatId, false, 'unregistered_user');
       return;
-    }
-
-    // User exists but telegram_id might be null (first time login)
-    if (!user.telegram_id) {
-      // Update telegram_id for this user
-      user = await database.updateUserTelegramId(telegramUser.username, chatId);
-      logger.success(`Updated telegram_id for user @${telegramUser.username}`);
     }
 
     // User exists - create session and login
@@ -220,7 +204,7 @@ bot.onText(/^\/start$/, async (msg) => {
 
     // Login successful - proceed to market selection
     resetState(chatId);
-    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || 'Trader'}! 👋\n\n` + helpMsg);
+    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}! 👋\n\n` + helpMsg);
     await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
 
   } catch (error) {
@@ -244,8 +228,7 @@ bot.onText(/^\/profile$/, async (msg) => {
     const stats = profile.stats;
 
     let profileMsg = `👤 YOUR PROFILE\n`;
-    profileMsg += `\nName: ${user.telegram_first_name || 'N/A'}`;
-    if (user.telegram_username) profileMsg += `\nUsername: @${user.telegram_username}`;
+    profileMsg += `\nName: ${user.telegram_first_name || user.first_name || 'N/A'}`;
     profileMsg += `\nEmail: ${user.email || 'N/A'}`;
     profileMsg += `\nPhone: ${user.phone || 'N/A'}`;
     profileMsg += `\n\n📊 STATISTICS`;

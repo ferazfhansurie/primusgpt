@@ -1,16 +1,16 @@
 {
   "name": "trading-analyzer-api",
   "version": "1.0.0",
-  "description": "Trading analysis using TwelveData API and AI - follows same SOP as ai-trading-analyzer but with API data instead of screenshots",
+  "description": "PRIMUS GPT API - Provides authentication and registration services for Telegram bot",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node src/test.js",
-    "test:commodities": "node src/test-commodities.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "bot": "node src/bot/telegramBot.js",
-    "server": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "analyze": "node src/index.js",
+    "test": "node src/test.js",
+    "test:commodities": "node src/test-commodities.js"
   },
   "keywords": [
     "trading",

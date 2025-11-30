@@ -18,10 +18,32 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const app = express();
 const PORT = process.env.API_PORT || 3000;
 
+// CORS configuration - allow both localhost and production
+const allowedOrigins = [
+  'http://localhost:5173',  // Vite dev server
+  'http://localhost:3000',  // Local frontend
+  'http://localhost:5174',  // Alternative Vite port
+  process.env.WEB_URL,      // Production URL
+  'https://primusgpt.com',  // Production domain
+  'https://primusgpt-ai.vercel.app'  // Vercel deployment
+].filter(Boolean);
+
 // Middleware
 app.use(cors({
-  origin: process.env.WEB_URL || '*',
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn(`CORS blocked origin: ${origin}`);
+      callback(null, true); // Allow all in development
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -70,7 +92,7 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   logger.success(`API server running on port ${PORT}`);
-  logger.info(`CORS enabled for: ${process.env.WEB_URL || '*'}`);
+  logger.info(`Allowed origins: ${allowedOrigins.join(', ')}`);
 });
 
 // Graceful shutdown

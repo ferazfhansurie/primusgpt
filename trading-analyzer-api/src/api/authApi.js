@@ -13,19 +13,9 @@ const router = express.Router();
  */
 router.post('/register', async (req, res) => {
   try {
-    const { telegram_username, email, phone, first_name, last_name } = req.body;
+    const { email, phone, first_name, last_name } = req.body;
 
     // Validate required fields
-    if (!telegram_username) {
-      return res.status(400).json({
-        success: false,
-        error: 'Telegram username is required'
-      });
-    }
-
-    // Clean username (remove @ if present)
-    const cleanUsername = telegram_username.replace('@', '');
-
     if (!email || !authService.validateEmail(email)) {
       return res.status(400).json({
         success: false,
@@ -40,65 +30,60 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Check if username already exists
-    const existingUser = await database.getUserByUsername(cleanUsername);
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: 'User already registered with this Telegram username'
-      });
-    }
-
     // Check if email already exists
-    const emailCheck = await database.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
-    );
-    if (emailCheck.rows.length > 0) {
+    const emailCheck = await database.getUserByEmail(email);
+    if (emailCheck) {
       return res.status(409).json({
         success: false,
         error: 'Email already registered'
       });
     }
 
+    // Check if phone already exists
+    const phoneCheck = await database.getUserByPhone(phone);
+    if (phoneCheck) {
+      return res.status(409).json({
+        success: false,
+        error: 'Phone number already registered'
+      });
+    }
+
     // Create user (without telegram_id yet)
     const query = `
       INSERT INTO users (
-        telegram_username,
-        telegram_first_name,
-        telegram_last_name,
         email,
-        phone
+        phone,
+        first_name,
+        last_name
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4)
       RETURNING *;
     `;
 
     const result = await database.query(query, [
-      cleanUsername,
-      first_name || null,
-      last_name || null,
       email,
-      phone
+      phone,
+      first_name || null,
+      last_name || null
     ]);
 
     const user = result.rows[0];
 
-    // Log successful registration (use username as identifier)
+    // Log successful registration
     await database.query(
       'INSERT INTO login_attempts (telegram_id, success, attempt_type) VALUES ($1, $2, $3)',
       [0, true, 'web_registration']
     );
 
-    logger.success(`New user registered via web: @${cleanUsername} (${email})`);
+    logger.success(`New user registered via web: ${email} (${phone})`);
 
     res.status(201).json({
       success: true,
       message: 'Registration successful! You can now login via Telegram bot.',
       user: {
-        telegram_username: user.telegram_username,
         email: user.email,
-        first_name: user.telegram_first_name,
+        phone: user.phone,
+        first_name: user.first_name,
         created_at: user.created_at
       }
     });
@@ -113,23 +98,33 @@ router.post('/register', async (req, res) => {
 });
 
 /**
- * Check if Telegram username is already registered
- * GET /api/auth/check/:telegram_username
+ * Check if email or phone is already registered
+ * POST /api/auth/check
+ * Body: { email?, phone? }
  */
-router.get('/check/:telegram_username', async (req, res) => {
+router.post('/check', async (req, res) => {
   try {
-    const { telegram_username } = req.params;
-    const cleanUsername = telegram_username.replace('@', '');
+    const { email, phone } = req.body;
+    let user = null;
 
-    const user = await database.getUserByUsername(cleanUsername);
+    if (email) {
+      user = await database.getUserByEmail(email);
+    } else if (phone) {
+      user = await database.getUserByPhone(phone);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Email or phone is required'
+      });
+    }
 
     res.json({
       success: true,
       registered: !!user,
       user: user ? {
-        telegram_username: user.telegram_username,
         email: user.email,
-        first_name: user.telegram_first_name,
+        phone: user.phone,
+        first_name: user.first_name,
         created_at: user.created_at
       } : null
     });
@@ -192,9 +187,9 @@ router.get('/stats/:telegram_id', async (req, res) => {
       success: true,
       user: {
         telegram_id: user.telegram_id,
-        first_name: user.telegram_first_name,
-        username: user.telegram_username,
+        first_name: user.telegram_first_name || user.first_name,
         email: user.email,
+        phone: user.phone,
         created_at: user.created_at,
         last_login: user.last_login
       },

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import './Register.css';
 
 interface RegisterFormData {
-  telegram_username: string;
   email: string;
   phone: string;
   first_name: string;
@@ -11,7 +10,6 @@ interface RegisterFormData {
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState<RegisterFormData>({
-    telegram_username: '',
     email: '',
     phone: '',
     first_name: '',
@@ -21,8 +19,10 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [registeredData, setRegisteredData] = useState<RegisterFormData | null>(null);
 
-  const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'PrimusGPT_bot';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'primusgpt_ai_bot';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -34,11 +34,6 @@ const Register: React.FC = () => {
   };
 
   const validateForm = () => {
-    if (!formData.telegram_username) {
-      setError('Telegram username is required');
-      return false;
-    }
-
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       setError('Please enter a valid email address');
       return false;
@@ -67,37 +62,61 @@ const Register: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    // Simulate processing
-    setTimeout(() => {
-      setSuccess(true);
-      setLoading(false);
-      
-      // Store registration data in localStorage for reference
-      const registrationData = {
-        telegram_username: formData.telegram_username.replace('@', ''),
-        email: formData.email,
-        phone: formData.phone,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        registered_at: new Date().toISOString()
-      };
-      
-      localStorage.setItem('primus_registration', JSON.stringify(registrationData));
-      
-      setFormData({
-        telegram_username: '',
-        email: '',
-        phone: '',
-        first_name: '',
-        last_name: ''
+    // Prepare data
+    const registrationData = {
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim()
+    };
+    
+    try {
+      // Send to API
+      const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
       });
-    }, 1000);
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccess(true);
+        setRegisteredData(registrationData);
+        
+        // Store registration data in localStorage for reference
+        const storedData = {
+          ...registrationData,
+          registered_at: new Date().toISOString()
+        };
+        
+        localStorage.setItem('primus_registration', JSON.stringify(storedData));
+        
+        // Clear form
+        setFormData({
+          email: '',
+          phone: '',
+          first_name: '',
+          last_name: ''
+        });
+      } else {
+        setError(data.error || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Network error:', err);
+      setError('Network error. Please check if the API server is running and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openTelegram = () => {
-    const cleanUsername = formData.telegram_username.replace('@', '');
+    const email = registeredData?.email || formData.email;
+    const phone = registeredData?.phone || formData.phone;
     const message = encodeURIComponent(
-      `/start\nUsername: ${cleanUsername}\nEmail: ${formData.email || 'N/A'}`
+      `/start\nEmail: ${email}\nPhone: ${phone}`
     );
     window.open(`https://t.me/${BOT_USERNAME}?text=${message}`, '_blank');
   };
@@ -113,8 +132,8 @@ const Register: React.FC = () => {
             <h3>Next Steps:</h3>
             <ol>
               <li>Click the button below to open Telegram</li>
-              <li>Send the pre-filled message to our bot</li>
-              <li>Follow the bot's instructions to complete registration</li>
+              <li>Click /start to begin</li>
+              <li>The bot will recognize you automatically</li>
               <li>Start analyzing markets!</li>
             </ol>
           </div>
@@ -141,37 +160,13 @@ const Register: React.FC = () => {
         </p>
 
         <div className="telegram-id-info">
-          <h3>📱 Your Telegram Username:</h3>
-          <ol>
-            <li>Open Telegram</li>
-            <li>Go to Settings</li>
-            <li>Your username appears under your name (starts with @)</li>
-            <li>Enter it below (with or without @)</li>
-          </ol>
+          <h3>📱 Registration Info:</h3>
           <p className="info-note">
-            ℹ️ Don't have a username? Tap "Username" in Settings to create one.
-          </p>
-          <p className="info-note">
-            💡 After submitting, you'll be redirected to our Telegram bot to complete registration.
+            After registration, you'll be redirected to our Telegram bot. Click /start and the bot will recognize you automatically using your email or phone.
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="telegram_username">
-              Telegram Username <span className="required">*</span>
-            </label>
-            <input
-              type="text"
-              id="telegram_username"
-              name="telegram_username"
-              value={formData.telegram_username}
-              onChange={handleChange}
-              placeholder="Enter your username (e.g., @johndoe or johndoe)"
-              required
-            />
-          </div>
-
           <div className="form-group">
             <label htmlFor="email">
               Email <span className="required">*</span>
