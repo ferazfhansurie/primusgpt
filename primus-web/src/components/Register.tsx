@@ -82,7 +82,6 @@ const Register: React.FC = () => {
     }
 
     return true;
-  };return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
