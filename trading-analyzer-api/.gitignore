@@ -6,3 +6,5 @@ output/
 reports/
 *.log
 .DS_Store
+.vercel
+.env*.local
