@@ -1,11 +1,22 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from parent directory
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
+
+// Global state for lazy loading
+let dbInitialized = false;
+let database = null;
+let authApi = null;
+let paymentApi = null;
 
 // CORS configuration - allow all origins for now
 app.use(cors({
@@ -27,6 +38,23 @@ app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
+
+// Database initialization middleware
+async function initializeDatabase() {
+  if (!dbInitialized) {
+    try {
+      const dbModule = await import('../src/db/database.js');
+      database = dbModule.default;
+      await database.initialize();
+      dbInitialized = true;
+      console.log('Database initialized successfully');
+    } catch (error) {
+      console.error('Database initialization failed:', error);
+      throw error;
+    }
+  }
+  return database;
+}
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -55,28 +83,58 @@ app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     status: 'healthy',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    env: {
+      hasDatabase: !!process.env.DATABASE_URL,
+      hasStripe: !!process.env.STRIPE_SECRET_KEY,
+      hasOpenAI: !!process.env.OPENAI_API_KEY
+    }
   });
 });
 
-// Lazy load routes
+// Auth routes with lazy loading and DB initialization
 app.use('/api/auth', async (req, res, next) => {
   try {
-    const { default: authApi } = await import('../src/api/authApi.js');
+    // Initialize database first
+    await initializeDatabase();
+    
+    // Load auth API if not loaded
+    if (!authApi) {
+      const authModule = await import('../src/api/authApi.js');
+      authApi = authModule.default;
+    }
+    
     return authApi(req, res, next);
   } catch (error) {
-    console.error('Error loading authApi:', error);
-    res.status(500).json({ error: 'Failed to load auth API', details: error.message });
+    console.error('Error in auth route:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process auth request', 
+      details: error.message 
+    });
   }
 });
 
+// Payment routes with lazy loading and DB initialization
 app.use('/api/payment', async (req, res, next) => {
   try {
-    const { default: paymentApi } = await import('../src/api/paymentApi.js');
+    // Initialize database first
+    await initializeDatabase();
+    
+    // Load payment API if not loaded
+    if (!paymentApi) {
+      const paymentModule = await import('../src/api/paymentApi.js');
+      paymentApi = paymentModule.default;
+    }
+    
     return paymentApi(req, res, next);
   } catch (error) {
-    console.error('Error loading paymentApi:', error);
-    res.status(500).json({ error: 'Failed to load payment API', details: error.message });
+    console.error('Error in payment route:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process payment request', 
+      details: error.message 
+    });
   }
 });
 
