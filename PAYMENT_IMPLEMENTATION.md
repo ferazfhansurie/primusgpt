@@ -42,12 +42,12 @@ npm install @stripe/stripe-js
 
 ### Frontend (primus-web/.env):
 ```
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51SYCn0BXs32c86pTO6qxOBhJK2h62JQj3SEA7xHBlLWepJh6IPUH47l4aNdSgJvycsoJgXPb5AIgF0514nYHWfNr00vGdtkwqk
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
 ```
 
 ### Backend (primus-api/.env):
 ```
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+STRIPE_SECRET_KEY=sk_test_xxxxx
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 ```
 

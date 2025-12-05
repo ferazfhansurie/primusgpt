@@ -68,12 +68,12 @@ Already configured in `.env` files:
 
 **Publishable Key (Frontend):**
 ```
-pk_test_51SYCn0BXs32c86pTO6qxOBhJK2h62JQj3SEA7xHBlLWepJh6IPUH47l4aNdSgJvycsoJgXPb5AIgF0514nYHWfNr00vGdtkwqk
+pk_test_xxxxx (See .env file)
 ```
 
 **Secret Key (Backend):**
 ```
-sk_test_your_stripe_secret_key_here
+sk_test_xxxxx (See .env file)
 ```
 
 ## 📝 Test Cards
