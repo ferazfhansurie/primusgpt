@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import './Register.css';
-
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 interface RegisterFormData {
   email: string;
@@ -64,7 +60,6 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [registeredData, setRegisteredData] = useState<RegisterFormData | null>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
   const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'primusgpt_ai_bot';
@@ -155,14 +150,14 @@ const Register: React.FC = () => {
   };
 
   const openTelegram = () => {
-    const email = registeredData?.email || formData.email;
-    const phone = registeredData?.phone || formData.phone;
+  const openTelegram = () => {
+    const email = formData.email;
+    const phone = formData.phone;
     const message = encodeURIComponent(
       `/start\nEmail: ${email}\nPhone: ${phone}`
     );
     window.open(`https://t.me/${BOT_USERNAME}?text=${message}`, '_blank');
   };
-
   if (success) {
     return (
       <div className="register-container">
