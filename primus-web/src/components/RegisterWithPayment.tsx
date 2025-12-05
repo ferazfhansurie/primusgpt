@@ -150,7 +150,6 @@ const Register: React.FC = () => {
   };
 
   const openTelegram = () => {
-  const openTelegram = () => {
     const email = formData.email;
     const phone = formData.phone;
     const message = encodeURIComponent(
@@ -158,6 +157,7 @@ const Register: React.FC = () => {
     );
     window.open(`https://t.me/${BOT_USERNAME}?text=${message}`, '_blank');
   };
+
   if (success) {
     return (
       <div className="register-container">
