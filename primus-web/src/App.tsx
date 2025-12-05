@@ -12,7 +12,8 @@ import Testimonials from './components/Testimonials';
 import Pricing from './components/Pricing';
 import CTA from './components/CTA';
 import LoadingScreen from './components/LoadingScreen';
-import Register from './components/Register';
+import Register from './components/RegisterWithPayment';
+import RegisterSuccess from './components/RegisterSuccess';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +53,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/register" element={<Layout><Register /></Layout>} />
+        <Route path="/register/success" element={<Layout><RegisterSuccess /></Layout>} />
       </Routes>
     </>
   );

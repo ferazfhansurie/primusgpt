@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authApi from './api/authApi.js';
+import paymentApi from './api/paymentApi.js';
 import database from './db/database.js';
 import logger from './utils/logger.js';
 
@@ -45,6 +46,11 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Stripe webhook endpoint needs raw body
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
+
+// Regular JSON parsing for other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -59,6 +65,7 @@ await database.initialize();
 
 // Routes
 app.use('/api/auth', authApi);
+app.use('/api/payment', paymentApi);
 
 // Root endpoint
 app.get('/', (req, res) => {
