@@ -338,12 +338,17 @@ Return ONLY valid JSON:
     
     let stop_loss, take_profit_1, take_profit_2;
     
-    if (dailyResult.signal === 'buy') {
+    // Determine signal type for calculations (use trend if signal is WAIT)
+    const effectiveSignal = dailyResult.signal !== 'wait' ? dailyResult.signal :
+                           dailyResult.trend === 'uptrend' ? 'buy' :
+                           dailyResult.trend === 'downtrend' ? 'sell' : 'buy';
+    
+    if (effectiveSignal === 'buy') {
       // For BUY: SL below zone, TP above zone
       stop_loss = m30Result.zone_price_low - pipDistance30;
       take_profit_1 = m30Result.zone_price_low + pipDistance30;
       take_profit_2 = m30Result.zone_price_low + pipDistance100;
-    } else if (dailyResult.signal === 'sell') {
+    } else if (effectiveSignal === 'sell') {
       // For SELL: SL above zone, TP below zone
       stop_loss = m30Result.zone_price_high + pipDistance30;
       take_profit_1 = m30Result.zone_price_high - pipDistance30;
