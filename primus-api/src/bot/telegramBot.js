@@ -964,26 +964,34 @@ bot.on('callback_query', async (query) => {
       caption += `Confidence: ${confidence}%\n`;
 
       // Add zone info with emojis based on signal direction
-      const zone = result.entry_zone || result.daily_zone || result.primary_zone;
+      const zone = result.entry_zone || result.m30_zone || result.daily_zone || result.primary_zone;
       if (zone && zone.price_low && zone.price_high) {
-        if (result.signal === 'buy') {
+        // Determine zone type based on signal, or use trend if signal is WAIT
+        let zoneType = result.signal;
+        if (result.signal === 'wait') {
+          // Use micro_trend or daily_trend to determine zone display
+          const trend = result.micro_trend || result.daily_trend || 'ranging';
+          zoneType = trend === 'bullish' ? 'buy' : trend === 'bearish' ? 'sell' : 'buy';
+        }
+        
+        if (zoneType === 'buy') {
           caption += `\n🟢 Buy Zone:\n`;
-          caption += `${zone.price_low.toFixed(5)} - ${zone.price_high.toFixed(5)}\n`;
-        } else if (result.signal === 'sell') {
+          caption += `${zone.price_low.toFixed(2)} - ${zone.price_high.toFixed(2)}\n`;
+        } else if (zoneType === 'sell') {
           caption += `\n🔴 Sell Zone:\n`;
-          caption += `${zone.price_low.toFixed(5)} - ${zone.price_high.toFixed(5)}\n`;
+          caption += `${zone.price_low.toFixed(2)} - ${zone.price_high.toFixed(2)}\n`;
         }
       }
 
       // Add SL and TP levels with emojis - show actual prices
       if (result.stop_loss) {
-        caption += `\n🛑 SL: ${result.stop_loss.toFixed(5)}\n`;
+        caption += `\n🛑 SL: ${result.stop_loss.toFixed(2)}\n`;
       }
       if (result.take_profit_1) {
-        caption += `✅ TP1: ${result.take_profit_1.toFixed(5)}\n`;
+        caption += `✅ TP1: ${result.take_profit_1.toFixed(2)}\n`;
       }
       if (result.take_profit_2) {
-        caption += `✅ TP2: ${result.take_profit_2.toFixed(5)}\n`;
+        caption += `✅ TP2: ${result.take_profit_2.toFixed(2)}\n`;
       }
 
       // Add timeframe at the end
