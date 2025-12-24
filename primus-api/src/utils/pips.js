@@ -98,3 +98,14 @@ export function formatPrice(pair, price) {
   // Forex pairs use 5 decimals
   return price.toFixed(5);
 }
+
+/**
+ * Convert pips to price distance
+ * @param {string} pair - Trading pair
+ * @param {number} pips - Number of pips
+ * @returns {number} Price distance
+ */
+export function pipsToPrice(pair, pips) {
+  const pipValue = pipValues[pair] || 0.0001;
+  return pips * pipValue;
+}

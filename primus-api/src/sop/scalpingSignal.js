@@ -1,6 +1,6 @@
 import config from '../utils/config.js';
 import logger from '../utils/logger.js';
-import { validateZoneSize } from '../utils/pips.js';
+import { validateZoneSize, pipsToPrice, formatPrice } from '../utils/pips.js';
 
 /**
  * Scalping Signal SOP Implementation (API-based)
@@ -318,6 +318,32 @@ Return ONLY valid JSON:
       logger.success('✅ Setup marked as VALID');
     }
 
+    // Calculate SL and TP in pips (scalping strategy)
+    // SL: 30 pips from end of zone
+    // TP1: 30 pips from starting zone
+    // TP2: 100 pips from starting zone
+    const stop_loss_pips = 30;
+    const take_profit_1_pips = 30;
+    const take_profit_2_pips = 100;
+
+    // Calculate actual price levels
+    const pipDistance30 = pipsToPrice(primaryResult.pair, 30);
+    const pipDistance100 = pipsToPrice(primaryResult.pair, 100);
+    
+    let stop_loss, take_profit_1, take_profit_2;
+    
+    if (primaryResult.signal === 'buy') {
+      // For BUY: SL below zone, TP above zone
+      stop_loss = entryResult.zone_price_low - pipDistance30;
+      take_profit_1 = entryResult.zone_price_low + pipDistance30;
+      take_profit_2 = entryResult.zone_price_low + pipDistance100;
+    } else if (primaryResult.signal === 'sell') {
+      // For SELL: SL above zone, TP below zone
+      stop_loss = entryResult.zone_price_high + pipDistance30;
+      take_profit_1 = entryResult.zone_price_high - pipDistance30;
+      take_profit_2 = entryResult.zone_price_high - pipDistance100;
+    }
+
     return {
       strategy: this.name,
       pair: primaryResult.pair,
@@ -327,6 +353,12 @@ Return ONLY valid JSON:
       pattern: primaryResult.pattern,
       momentum: primaryResult.momentum,
       confidence,
+      stop_loss_pips,
+      take_profit_1_pips,
+      take_profit_2_pips,
+      stop_loss,
+      take_profit_1,
+      take_profit_2,
       primary_zone: {
         type: primaryResult.zone_type,
         price_high: primaryResult.zone_price_high,

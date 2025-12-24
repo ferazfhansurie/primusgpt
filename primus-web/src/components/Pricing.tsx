@@ -6,7 +6,9 @@ interface PricingPlan {
     id: BillingCycle;
     label: string;
     price: string;
+    originalPrice: string;
     perMonth?: string;
+    originalPerMonth?: string;
     discount?: string;
     savings?: string;
     popular?: boolean;
@@ -17,12 +19,15 @@ const plans: PricingPlan[] = [
         id: 'monthly',
         label: 'Monthly',
         price: '29.90',
+        originalPrice: '39.90',
     },
     {
         id: 'quarterly',
         label: 'Quarterly',
         price: '80.70',
+        originalPrice: '107.70',
         perMonth: '26.90',
+        originalPerMonth: '35.90',
         discount: '10% off',
         savings: '$9.00',
         popular: true,
@@ -31,7 +36,9 @@ const plans: PricingPlan[] = [
         id: '6-months',
         label: '6-Months',
         price: '152.50',
+        originalPrice: '203.40',
         perMonth: '25.40',
+        originalPerMonth: '33.90',
         discount: '15% off',
         savings: '$26.90',
     },
@@ -39,7 +46,9 @@ const plans: PricingPlan[] = [
         id: 'annual',
         label: 'Annual',
         price: '287.00',
+        originalPrice: '383.00',
         perMonth: '23.90',
+        originalPerMonth: '31.90',
         discount: '20% off',
         savings: '$71.80',
     },
@@ -62,6 +71,11 @@ const Pricing: React.FC = () => {
     return (
         <section className="pricing-section">
             <div className="container">
+                <div className="sale-banner">
+                    🎉 NEW YEAR SALE 🎉
+                    <span className="sale-subtitle">Limited Time Offer - Save Up To 25%!</span>
+                </div>
+                
                 <div className="pricing-header">
                     <h2 className="section-title">
                         Choose Your <span className="text-gradient">PRIMUSGPT.AI</span>
@@ -97,6 +111,11 @@ const Pricing: React.FC = () => {
                             <h4 className="plan-name">{activePlan.label}</h4>
                             
                             <div className="price-container">
+                                <div className="original-price-display">
+                                    <span className="was-text">Was:</span>
+                                    <span className="original-price">${activePlan.originalPrice}</span>
+                                </div>
+                                
                                 <div className="price-main">
                                     <span className="currency">$</span>
                                     <span className="price">{activePlan.price}</span>
@@ -105,6 +124,9 @@ const Pricing: React.FC = () => {
                                 
                                 {activePlan.perMonth && (
                                     <div className="price-breakdown">
+                                        {activePlan.originalPerMonth && (
+                                            <span className="original-per-month">≈ ${activePlan.originalPerMonth}/month</span>
+                                        )}
                                         <span className="per-month">≈ ${activePlan.perMonth}/month</span>
                                     </div>
                                 )}
@@ -148,6 +170,43 @@ const Pricing: React.FC = () => {
             </div>
 
             <style>{`
+                .sale-banner {
+                    text-align: center;
+                    padding: 1.5rem 2rem;
+                    background: linear-gradient(135deg, #ff6b35, #ff8c5f, #ffd700);
+                    border-radius: 1rem;
+                    margin: 0 auto 3rem;
+                    max-width: 600px;
+                    font-size: 1.75rem;
+                    font-weight: 900;
+                    color: #000;
+                    text-transform: uppercase;
+                    letter-spacing: 0.1em;
+                    box-shadow: 0 10px 40px rgba(255, 107, 53, 0.4);
+                    animation: pulse 2s ease-in-out infinite;
+                    position: relative;
+                    z-index: 2;
+                }
+
+                .sale-subtitle {
+                    display: block;
+                    font-size: 1rem;
+                    font-weight: 700;
+                    margin-top: 0.5rem;
+                    letter-spacing: 0.05em;
+                }
+
+                @keyframes pulse {
+                    0%, 100% {
+                        transform: scale(1);
+                        box-shadow: 0 10px 40px rgba(255, 107, 53, 0.4);
+                    }
+                    50% {
+                        transform: scale(1.02);
+                        box-shadow: 0 15px 50px rgba(255, 107, 53, 0.6);
+                    }
+                }
+
                 .pricing-section {
                     padding: 8rem 0;
                     background: linear-gradient(180deg, var(--bg-primary) 0%, rgba(168, 85, 247, 0.03) 50%, var(--bg-primary) 100%);
@@ -263,7 +322,29 @@ const Pricing: React.FC = () => {
 
                 .pricing-card.popular {
                     border-color: var(--accent-orange);
-                    box-shadow: 0 10px 40px rgba(255, 107, 53, 0.3);
+                 original-price-display {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.5rem;
+                    margin-bottom: 0.5rem;
+                    opacity: 0.7;
+                }
+
+                .was-text {
+                    font-size: 1rem;
+                    color: var(--text-secondary);
+                    font-weight: 600;
+                }
+
+                .original-price {
+                    font-size: 1.5rem;
+                    color: var(--text-secondary);
+                    text-decoration: line-through;
+                    font-weight: 700;
+                }
+
+                .   box-shadow: 0 10px 40px rgba(255, 107, 53, 0.3);
                 }
 
                 .popular-badge {
@@ -275,12 +356,24 @@ const Pricing: React.FC = () => {
                     background: linear-gradient(135deg, var(--accent-orange), #ff8c5f);
                     color: #fff;
                     font-size: 0.875rem;
-                    font-weight: 700;
-                    border-radius: 999px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.1em;
-                    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.25rem;
                 }
+
+                .original-per-month {
+                    font-size: 1rem;
+                    color: var(--text-secondary);
+                    font-weight: 600;
+                    text-decoration: line-through;
+                    opacity: 0.7;
+                }
+
+                .per-month {
+                    font-size: 1.125rem;
+                    color: var(--accent-orange);
+                    font-weight: 7
 
                 .pricing-header-card {
                     text-align: center;
@@ -315,15 +408,25 @@ const Pricing: React.FC = () => {
                     margin-top: 0.5rem;
                 }
 
-                .price {
-                    font-size: 4rem;
-                    font-weight: 800;
-                    background: linear-gradient(135deg, var(--accent-orange), #a855f7);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    background-clip: text;
-                    line-height: 1;
+                .price {linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(168, 85, 247, 0.2));
+                    border: 2px solid var(--accent-orange);
+                    border-radius: 999px;
+                    animation: glow 2s ease-in-out infinite;
                 }
+
+                @keyframes glow {
+                    0%, 100% {
+                        box-shadow: 0 0 10px rgba(255, 107, 53, 0.3);
+                    }
+                    50% {
+                        box-shadow: 0 0 20px rgba(255, 107, 53, 0.6);
+                    }
+                }
+
+                .discount-badge {
+                    font-size: 0.875rem;
+                    font-weight: 700;
+                    color: var(--accent-orange)
 
                 .period {
                     font-size: 1.25rem;
@@ -393,26 +496,40 @@ const Pricing: React.FC = () => {
                     font-size: 1rem;
                     color: var(--text-primary);
                     font-weight: 500;
-                }
+                }ale-banner {
+                        font-size: 1.25rem;
+                        padding: 1rem 1.5rem;
+                        margin: 0 1rem 2rem;
+                    }
 
-                .check-icon {
-                    width: 24px;
-                    height: 24px;
-                    color: var(--accent-orange);
-                    flex-shrink: 0;
-                }
+                    .sale-subtitle {
+                        font-size: 0.875rem;
+                    }
 
-                .pricing-cta {
-                    width: 100%;
-                    padding: 1.25rem 2rem;
-                    font-size: 1.125rem;
-                    font-weight: 700;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.75rem;
-                }
+                    .section-subtitle-large {
+                        font-size: 1.5rem;
+                    }
 
+                    .billing-tabs {
+                        gap: 0.5rem;
+                    }
+
+                    .billing-tab {
+                        padding: 0.75rem 1.25rem;
+                        font-size: 0.875rem;
+                    }
+
+                    .tab-badge {
+                        font-size: 0.6rem;
+                        padding: 0.2rem 0.5rem;
+                    }
+
+                    .pricing-card {
+                        padding: 2rem 1.5rem;
+                    }
+
+                    .original-price {
+                        font-size: 1.2
                 .arrow-icon {
                     width: 20px;
                     height: 20px;

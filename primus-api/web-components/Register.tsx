@@ -72,7 +72,7 @@ const Register: React.FC = () => {
     }
 
     if (!formData.phone || !/^\+?[1-9]\d{6,14}$/.test(formData.phone.replace(/[\s\-()]/g, ''))) {
-      setError('Please enter a valid phone number with country code (e.g., +60123456789)');
+      setError('Please enter a valid phone number with country code (e.g., +971501234567)');
       return false;
     }
 
@@ -232,10 +232,10 @@ const Register: React.FC = () => {
               name="phone"
               value={formData.phone}
               onChange={handleChange}
-              placeholder="+60123456789"
+              placeholder="+971501234567"
               required
             />
-            <small>Include country code (e.g., +60 for Malaysia)</small>
+            <small>Include country code (e.g., +971 for UAE)</small>
           </div>
 
           <div className="form-row">

@@ -13,6 +13,7 @@ interface PricingPlan {
   id: string;
   label: string;
   price: string;
+  originalPrice: string;
   perMonth?: string;
   discount?: string;
   popular?: boolean;
@@ -23,11 +24,13 @@ const plans: PricingPlan[] = [
     id: 'monthly',
     label: 'Monthly',
     price: '29.90',
+    originalPrice: '39.90',
   },
   {
     id: 'quarterly',
     label: 'Quarterly',
     price: '80.70',
+    originalPrice: '107.70',
     perMonth: '26.90/mo',
     discount: '10% off',
     popular: true,
@@ -36,6 +39,7 @@ const plans: PricingPlan[] = [
     id: '6-months',
     label: '6-Months',
     price: '152.50',
+    originalPrice: '203.40',
     perMonth: '25.40/mo',
     discount: '15% off',
   },
@@ -43,6 +47,7 @@ const plans: PricingPlan[] = [
     id: 'annual',
     label: 'Annual',
     price: '287.00',
+    originalPrice: '383.00',
     perMonth: '23.90/mo',
     discount: '20% off',
   },
@@ -82,7 +87,7 @@ const Register: React.FC = () => {
     }
 
     if (!formData.phone || !/^\+?[1-9]\d{6,14}$/.test(formData.phone.replace(/[\s\-()]/g, ''))) {
-      setError('Please enter a valid phone number with country code (e.g., +60123456789)');
+      setError('Please enter a valid phone number with country code (e.g., +971501234567)');
       return false;
     }
 
@@ -191,6 +196,11 @@ const Register: React.FC = () => {
   return (
     <div className="register-container">
       <div className="register-card">
+        <div className="sale-banner-register">
+          🎉 NEW YEAR SALE 🎉
+          <span className="sale-subtitle-register">Save Up To 25% - Limited Time!</span>
+        </div>
+        
         <h1 className="register-title">Register for <span className="text-gradient">PRIMUS GPT</span></h1>
         <p className="register-subtitle">
           Start with a 7-day free trial, then choose your subscription plan
@@ -209,6 +219,7 @@ const Register: React.FC = () => {
               >
                 {plan.popular && <span className="plan-badge">Most Popular</span>}
                 <div className="plan-label">{plan.label}</div>
+                <div className="plan-original-price">${plan.originalPrice}</div>
                 <div className="plan-price">${plan.price}</div>
                 {plan.perMonth && <div className="plan-per-month">{plan.perMonth}</div>}
                 {plan.discount && <div className="plan-discount">{plan.discount}</div>}
@@ -253,10 +264,10 @@ const Register: React.FC = () => {
               name="phone"
               value={formData.phone}
               onChange={handleChange}
-              placeholder="+60123456789"
+              placeholder="+971501234567"
               required
             />
-            <small>Include country code (e.g., +60 for Malaysia)</small>
+            <small>Include country code (e.g., +971 for UAE)</small>
           </div>
 
           <div className="form-row">

@@ -1,6 +1,6 @@
 import config from '../utils/config.js';
 import logger from '../utils/logger.js';
-import { validateZoneSize } from '../utils/pips.js';
+import { validateZoneSize, pipsToPrice, formatPrice } from '../utils/pips.js';
 
 /**
  * Swing Signal SOP Implementation (API-based)
@@ -324,6 +324,32 @@ Return ONLY valid JSON:
       logger.success('✅ Setup marked as VALID');
     }
 
+    // Calculate SL and TP in pips (swing strategy)
+    // SL: 30 pips from end of zone
+    // TP1: 30 pips from starting zone
+    // TP2: 100 pips from starting zone
+    const stop_loss_pips = 30;
+    const take_profit_1_pips = 30;
+    const take_profit_2_pips = 100;
+
+    // Calculate actual price levels
+    const pipDistance30 = pipsToPrice(dailyResult.pair, 30);
+    const pipDistance100 = pipsToPrice(dailyResult.pair, 100);
+    
+    let stop_loss, take_profit_1, take_profit_2;
+    
+    if (dailyResult.signal === 'buy') {
+      // For BUY: SL below zone, TP above zone
+      stop_loss = m30Result.zone_price_low - pipDistance30;
+      take_profit_1 = m30Result.zone_price_low + pipDistance30;
+      take_profit_2 = m30Result.zone_price_low + pipDistance100;
+    } else if (dailyResult.signal === 'sell') {
+      // For SELL: SL above zone, TP below zone
+      stop_loss = m30Result.zone_price_high + pipDistance30;
+      take_profit_1 = m30Result.zone_price_high - pipDistance30;
+      take_profit_2 = m30Result.zone_price_high - pipDistance100;
+    }
+
     return {
       strategy: this.name,
       pair: dailyResult.pair,
@@ -332,6 +358,12 @@ Return ONLY valid JSON:
       trend: dailyResult.trend,
       pattern: dailyResult.pattern,
       confidence,
+      stop_loss_pips,
+      take_profit_1_pips,
+      take_profit_2_pips,
+      stop_loss,
+      take_profit_1,
+      take_profit_2,
       daily_zone: {
         type: dailyResult.zone_type,
         price_high: dailyResult.zone_price_high,

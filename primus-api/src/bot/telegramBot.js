@@ -49,7 +49,7 @@ function resetState(chatId) {
     market: null, 
     processing: false,
     lastButtons: null,
-    lastButtonsMessage: 'Select market type:'
+    lastButtonsMessage: 'Choose:'
   });
 }
 
@@ -200,14 +200,14 @@ bot.onText(/^\/start/, async (msg) => {
             last_name: telegramUser.last_name
           });
 
-          const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+          const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
           if (fs.existsSync(welcomeStickerPath)) {
             await bot.sendSticker(chatId, welcomeStickerPath);
           }
 
           resetState(chatId);
-          await bot.sendMessage(chatId, `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n` + helpMsg);
-          await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+            //  await bot.sendMessage(chatId, `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n` + helpMsg);
+          await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
           await database.logLoginAttempt(chatId, true, 'credentials_login');
           return;
         } else {
@@ -243,13 +243,27 @@ bot.onText(/^\/start/, async (msg) => {
       resetState(chatId);
       await conversationManager.updateState(chatId, 'market');
       
-      const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+      // Send welcome sticker, then replace with market selection
+      let stickerMessageId = null;
+      const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
       if (fs.existsSync(welcomeStickerPath)) {
-        await bot.sendSticker(chatId, welcomeStickerPath);
+        const welcomeMsg = await bot.sendSticker(chatId, welcomeStickerPath);
+        stickerMessageId = welcomeMsg.message_id;
+        // Wait a moment before switching
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
       
-      await bot.sendMessage(chatId, 'Welcome back.\n\n' + helpMsg);
-      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      // Delete welcome sticker and send market selection sticker
+      if (stickerMessageId) {
+        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+      }
+      
+      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath)) {
+        await bot.sendSticker(chatId, marketStickerPath);
+      }
+      
+      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
       
       // Save bot response
       await conversationManager.saveMessage(chatId, 'bot', 'Welcome back! Select market type.');
@@ -264,7 +278,7 @@ bot.onText(/^\/start/, async (msg) => {
         // User doesn't exist or hasn't been linked yet - prompt for registration
         const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
         
-        const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+        const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
         if (fs.existsSync(welcomeStickerPath)) {
           await bot.sendSticker(chatId, welcomeStickerPath);
         }      await bot.sendMessage(
@@ -292,15 +306,15 @@ bot.onText(/^\/start/, async (msg) => {
       last_name: telegramUser.last_name
     });
 
-    const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+    const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
     if (fs.existsSync(welcomeStickerPath)) {
       await bot.sendSticker(chatId, welcomeStickerPath);
     }
 
     // Login successful - proceed to market selection
     resetState(chatId);
-    await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
-    await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+    //await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
+    await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
 
   } catch (error) {
     logger.error('Start command failed:', error);
@@ -320,8 +334,11 @@ bot.onText(/^\/login$/, async (msg) => {
     const isAuth = await authService.isAuthenticated(chatId);
     
     if (isAuth) {
-      await bot.sendMessage(chatId, '✅ You are already logged in!\n\nUse /profile to view your account or start analyzing markets.');
-      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath)) {
+        await bot.sendSticker(chatId, marketStickerPath);
+      }
+      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
       return;
     }
 
@@ -331,7 +348,7 @@ bot.onText(/^\/login$/, async (msg) => {
     // Request phone number (just text input, no incompatible button)
     await bot.sendMessage(
       chatId,
-      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567 (UAE)\n• +60123456789 (Malaysia)\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
+      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
       {
         parse_mode: 'Markdown'
       }
@@ -441,7 +458,12 @@ bot.on('callback_query', async (query) => {
     await bot.answerCallbackQuery(query.id);
     const lastAnalysis = state.lastAnalysis;
     if (lastAnalysis && lastAnalysis.fullAnalysis) {
-      const detailedMsg = `DETAILED ANALYSIS\n${lastAnalysis.pair} | ${lastAnalysis.strategy.toUpperCase()}\n\n${lastAnalysis.fullAnalysis}`;
+      const detailedStickerPath = path.join(__dirname, '../../stickers/DetailedAnalysis.webm');
+      if (fs.existsSync(detailedStickerPath)) {
+        await bot.sendSticker(chatId, detailedStickerPath);
+      }
+      
+      const detailedMsg = `${lastAnalysis.pair} | ${lastAnalysis.strategy.toUpperCase()}\n\n${lastAnalysis.fullAnalysis}`;
       await bot.sendMessage(chatId, detailedMsg);
       // Send the same action buttons after detailed analysis
       await bot.sendMessage(chatId, 'What would you like to do next?', retryKeyboard(state.pair, state.strategy, false));
@@ -469,7 +491,13 @@ bot.on('callback_query', async (query) => {
   if (data === 'back_to_menu') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Back to menu' });
-    await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+    
+    const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+    if (fs.existsSync(marketStickerPath)) {
+      await bot.sendSticker(chatId, marketStickerPath);
+    }
+    
+    await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
     return;
   }
 
@@ -477,7 +505,13 @@ bot.on('callback_query', async (query) => {
   if (data === 'cancel') {
     resetState(chatId);
     await bot.answerCallbackQuery(query.id, { text: 'Cancelled' });
-    await sendButtonsAndTrack(chatId, 'Cancelled. Select market type:', marketCategoryKeyboard());
+    
+    const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+    if (fs.existsSync(marketStickerPath)) {
+      await bot.sendSticker(chatId, marketStickerPath);
+    }
+    
+    await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
     return;
   }
 
@@ -489,15 +523,18 @@ bot.on('callback_query', async (query) => {
     const isAuth = await authService.isAuthenticated(chatId);
     
     if (isAuth) {
-      await bot.sendMessage(chatId, '✅ You are already logged in!\n\nUse /profile to view your account or start analyzing markets.');
-      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath)) {
+        await bot.sendSticker(chatId, marketStickerPath);
+      }
+      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
       return;
     }
     
     // Request phone number (same as /login command)
     await bot.sendMessage(
       chatId,
-      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567 (UAE)\n• +60123456789 (Malaysia)\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
+      '*Login with Phone Number*\n\nPlease enter your registered phone number.\n\n*Accepted formats:*\n• +971501234567\n• 971501234567\n• 0501234567\n\n_Note: Including your country code (+971 for UAE) ensures accurate verification._\n\nType /start to cancel.',
       { parse_mode: 'Markdown' }
     );
     
@@ -515,7 +552,13 @@ bot.on('callback_query', async (query) => {
     state.market = null;
     chatState.set(chatId, state);
     await bot.answerCallbackQuery(query.id);
-    await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+    
+    const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+    if (fs.existsSync(marketStickerPath)) {
+      await bot.sendSticker(chatId, marketStickerPath);
+    }
+    
+    await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
     return;
   }
 
@@ -534,7 +577,13 @@ bot.on('callback_query', async (query) => {
       chatState.set(chatId, state);
       await conversationManager.updateState(chatId, 'strategy');
       await bot.answerCallbackQuery(query.id);
-      await sendButtonsAndTrack(chatId, 'Gold (XAU/USD) - Choose strategy:', strategyKeyboard());
+      
+      const strategyStickerPath = path.join(__dirname, '../../stickers/StrategyGold.webm');
+      if (fs.existsSync(strategyStickerPath)) {
+        await bot.sendSticker(chatId, strategyStickerPath);
+      }
+      
+      await sendButtonsAndTrack(chatId, 'Choose:', strategyKeyboard());
       return;
     }
     
@@ -542,7 +591,13 @@ bot.on('callback_query', async (query) => {
     state.step = 'pair';
     chatState.set(chatId, state);
     await bot.answerCallbackQuery(query.id);
-    await sendButtonsAndTrack(chatId, 'Select Forex pair:', instrumentsKeyboard(market));
+    
+    const pairStickerPath = path.join(__dirname, '../../stickers/ChoosePairForex.webm');
+    if (fs.existsSync(pairStickerPath)) {
+      await bot.sendSticker(chatId, pairStickerPath);
+    }
+    
+    await sendButtonsAndTrack(chatId, 'Choose:', instrumentsKeyboard(market));
     return;
   }
 
@@ -554,7 +609,13 @@ bot.on('callback_query', async (query) => {
     chatState.set(chatId, state);
     await conversationManager.updateState(chatId, 'strategy');
     await bot.answerCallbackQuery(query.id);
-    await sendButtonsAndTrack(chatId, 'Choose strategy:', strategyKeyboard());
+    
+    const strategyForexStickerPath = path.join(__dirname, '../../stickers/StrategyForex.webm');
+    if (fs.existsSync(strategyForexStickerPath)) {
+      await bot.sendSticker(chatId, strategyForexStickerPath);
+    }
+    
+    await sendButtonsAndTrack(chatId, 'Choose:', strategyKeyboard());
     return;
   }
 
@@ -579,7 +640,7 @@ bot.on('callback_query', async (query) => {
 
     const statusMessage = await bot.sendMessage(
       chatId, 
-      `PRIMUS GPT - ${strategy.toUpperCase()} Analysis\n${state.pair}\n\nInitializing...`
+      `PRIMUS GPT - ${strategy.toUpperCase()} ${state.pair}`
     );
     const statusId = statusMessage.message_id;
 
@@ -590,19 +651,26 @@ bot.on('callback_query', async (query) => {
 
     logger.info(`Starting API analysis: pair=${state.pair}, strategy=${strategy}`);
 
-    // Helper function to update status
-    const updateStatus = async (message) => {
-      await bot.editMessageText(
-        `PRIMUS GPT - ${strategy.toUpperCase()} Analysis\n${state.pair}\n\n${message}`,
-        { chat_id: chatId, message_id: statusId }
-      ).catch(() => {});
-    };
-
     try {
+      // Send initial sticker and track message ID for editing
+      let stickerMessageId = null;
+      
       // Step 1: Validate API keys
-      await updateStatus('[1/6] Validating API keys...');
+      const validatingStickerPath = path.join(__dirname, '../../stickers/ValidatingAPIKeys.webm');
+      if (fs.existsSync(validatingStickerPath)) {
+        const stickerMsg = await bot.sendSticker(chatId, validatingStickerPath);
+        stickerMessageId = stickerMsg.message_id;
+      }
+      
       await orchestrator.validateKeys();
-      await updateStatus('[2/6] Fetching market data...');
+      
+      // Step 2: Update sticker to Fetching Data
+      const fetchingStickerPath = path.join(__dirname, '../../stickers/FetchingData.webm');
+      if (stickerMessageId && fs.existsSync(fetchingStickerPath)) {
+        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+        const newSticker = await bot.sendSticker(chatId, fetchingStickerPath);
+        stickerMessageId = newSticker.message_id;
+      }
 
       // Step 2: Get strategy and timeframes
       const strategyObj = orchestrator.strategies[strategy];
@@ -612,16 +680,19 @@ bot.on('callback_query', async (query) => {
       const timeframes = strategyObj.getRequiredTimeframes();
 
       // Step 3: Fetch market data with progress
-      await updateStatus(`[2/6] Fetching ${timeframes[0].interval} data...`);
       const tf1Data = await orchestrator.apiClient.getTimeSeries(state.pair, timeframes[0].interval, timeframes[0].bars);
       const tf1Formatted = orchestrator.dataFormatter.formatForAI(tf1Data, state.pair, timeframes[0].interval);
       
-      await updateStatus(`[3/6] Fetching ${timeframes[1].interval} data...`);
       const tf2Data = await orchestrator.apiClient.getTimeSeries(state.pair, timeframes[1].interval, timeframes[1].bars);
       const tf2Formatted = orchestrator.dataFormatter.formatForAI(tf2Data, state.pair, timeframes[1].interval);
 
-      // Step 4: AI Analysis
-      await updateStatus(`[4/6] Analyzing ${timeframes[0].interval} timeframe...`);
+      // Step 4: Update sticker to Analyzing
+      const analyzingStickerPath = path.join(__dirname, '../../stickers/Analyzing.webm');
+      if (stickerMessageId && fs.existsSync(analyzingStickerPath)) {
+        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+        const newSticker = await bot.sendSticker(chatId, analyzingStickerPath);
+        stickerMessageId = newSticker.message_id;
+      }
       
       let prompt1;
       if (strategy === 'swing') {
@@ -631,8 +702,6 @@ bot.on('callback_query', async (query) => {
       }
       const analysis1 = await orchestrator.gptAnalyzer.analyze(prompt1, tf1Formatted);
 
-      await updateStatus(`[4/6] Analyzing ${timeframes[1].interval} timeframe...`);
-      
       let prompt2;
       if (strategy === 'swing') {
         prompt2 = strategyObj.buildM30Prompt(state.pair, analysis1);
@@ -641,8 +710,13 @@ bot.on('callback_query', async (query) => {
       }
       const analysis2 = await orchestrator.gptAnalyzer.analyze(prompt2, tf2Formatted);
 
-      // Step 5: Combine analyses
-      await updateStatus('[5/6] Validating setup...');
+      // Step 5: Update sticker to Validating Setup
+      const validatingSetupStickerPath = path.join(__dirname, '../../stickers/ValidatingSetup.webm');
+      if (stickerMessageId && fs.existsSync(validatingSetupStickerPath)) {
+        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+        const newSticker = await bot.sendSticker(chatId, validatingSetupStickerPath);
+        stickerMessageId = newSticker.message_id;
+      }
       
       const analyses = [
         { timeframe: timeframes[0].interval, analysis: analysis1 },
@@ -651,8 +725,6 @@ bot.on('callback_query', async (query) => {
       const combinedAnalysis = orchestrator.combineAnalyses(strategyObj, analyses);
 
       // Step 6: Generate chart (always generate, even if invalid)
-      await updateStatus('[6/6] Generating chart...');
-      
       const marketData = {
         [timeframes[0].interval]: { ohlcv: tf1Data, formatted: tf1Formatted },
         [timeframes[1].interval]: { ohlcv: tf2Data, formatted: tf2Formatted }
@@ -660,20 +732,21 @@ bot.on('callback_query', async (query) => {
       combinedAnalysis.charts = await orchestrator.generateCharts(state.pair, strategy, combinedAnalysis, marketData);
 
       // Generate short summary
-      await updateStatus('[6/6] Generating summary...');
       const fullAnalysisText = extractReasoning(combinedAnalysis);
       const shortSummary = await generateShortSummary(orchestrator.gptAnalyzer, fullAnalysisText);
       combinedAnalysis.shortSummary = shortSummary;
 
-      // Final status
-      await updateStatus('[6/6] Analysis complete');
+      // Final - delete status message
+      await bot.deleteMessage(chatId, statusId).catch(() => {});
 
       // Clear typing indicator
       clearInterval(typingInterval);
-
-      // Delete status message after a brief pause
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await bot.deleteMessage(chatId, statusId).catch(() => {});
+      
+      // Delete sticker after a brief pause
+      await new Promise(resolve => setTimeout(resolve, 500));
+      if (stickerMessageId) {
+        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+      }
 
       const result = combinedAnalysis;
 
@@ -713,34 +786,42 @@ bot.on('callback_query', async (query) => {
         // Continue anyway - don't fail the analysis because of logging
       }
 
-      // Build caption
+      // Build caption in the new format with emojis
       const statusLabel = result.signal.toUpperCase();
       const confidence = (result.confidence * 100).toFixed(1);
       const validStatus = result.valid ? 'VALID' : 'INVALID';
 
-      let caption = `PRIMUS GPT Analysis\n`;
+      let caption = `📊 PRIMUS GPT Analysis\n`;
       caption += `${state.pair} | ${strategy.toUpperCase()}\n`;
       caption += `Status: ${validStatus}\n`;
       caption += `Signal: ${statusLabel}\n`;
       caption += `Confidence: ${confidence}%\n`;
 
-      // Add trend/pattern info
-      if (result.trend) caption += `Trend: ${result.trend}\n`;
-      if (result.micro_trend) caption += `Micro trend: ${result.micro_trend}\n`;
-      if (result.pattern) caption += `Pattern: ${result.pattern.replace('_', ' ')}\n`;
-
-      // Add zone info
+      // Add zone info with emojis
       const zone = result.daily_zone || result.primary_zone;
       if (zone && zone.price_low && zone.price_high) {
-        const zoneType = zone.type || (result.signal === 'buy' ? 'buy' : 'sell');
-        caption += `\nZone (${zoneType}):\n`;
+        caption += `\n🔴 Sell Zone:\n`;
+        caption += `${zone.price_low} - ${zone.price_high}\n`;
+        
+        caption += `\n🟢 Buy Zone:\n`;
         caption += `${zone.price_low} - ${zone.price_high}\n`;
       }
 
-      // Add short point form analysis
-      const shortAnalysis = result.shortSummary || extractShortAnalysis(result);
-      if (shortAnalysis) {
-        caption += `\n${shortAnalysis}`;
+      // Add SL and TP levels with emojis - show actual prices
+      if (result.stop_loss) {
+        caption += `\n🛑 SL : ${result.stop_loss.toFixed(2)}\n`;
+      }
+      if (result.take_profit_1) {
+        caption += `✅ TP1 : ${result.take_profit_1.toFixed(2)}\n`;
+      }
+      if (result.take_profit_2) {
+        caption += `✅ TP2 : ${result.take_profit_2.toFixed(2)}\n`;
+      }
+
+      // Add timeframe at the end
+      const strategyTimeframes = orchestrator.strategies[strategy].getRequiredTimeframes();
+      if (strategyTimeframes && strategyTimeframes.length > 0) {
+        caption += `\nTimeframe: ${strategyTimeframes[strategyTimeframes.length - 1].interval}`;
       }
 
       // Store full analysis for detailed view
@@ -753,9 +834,8 @@ bot.on('callback_query', async (query) => {
         // Get the last chart (bottom timeframe)
         const bottomChart = result.charts[result.charts.length - 1];
         if (fs.existsSync(bottomChart.path)) {
-          const tfCaption = `${caption}\n\nTimeframe: ${bottomChart.timeframe}`;
           await bot.sendPhoto(chatId, bottomChart.path, { 
-            caption: tfCaption.substring(0, 1024) // Telegram caption limit
+            caption: caption.substring(0, 1024) // Telegram caption limit
           });
         }
       }
@@ -851,12 +931,19 @@ bot.on('message', async (msg) => {
       chatState.set(chatId, state);
       resetState(chatId);
 
-      // Send success message
-      await bot.sendMessage(
-        chatId,
-        `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n${helpMsg}`
-      );
-      await sendButtonsAndTrack(chatId, 'Select market type:', marketCategoryKeyboard());
+      // Send welcome sticker
+      const welcomeToStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
+      if (fs.existsSync(welcomeToStickerPath)) {
+        await bot.sendSticker(chatId, welcomeToStickerPath);
+      }
+
+      // Send market selection sticker
+      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath)) {
+        await bot.sendSticker(chatId, marketStickerPath);
+      }
+
+      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
       
       await database.logLoginAttempt(chatId, true, 'phone_login');
       return;
@@ -885,7 +972,7 @@ bot.on('message', async (msg) => {
         // User doesn't exist - prompt for registration
         const registrationUrl = process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register';
         
-        const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+        const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
         if (fs.existsSync(welcomeStickerPath)) {
           await bot.sendSticker(chatId, welcomeStickerPath);
         }
@@ -915,15 +1002,21 @@ bot.on('message', async (msg) => {
         last_name: telegramUser.last_name
       });
 
-      const welcomeStickerPath = path.join(__dirname, '../../stickers/welcome.webp');
+      const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME TO.webm');
       if (fs.existsSync(welcomeStickerPath)) {
         await bot.sendSticker(chatId, welcomeStickerPath);
       }
 
       // Auto-login successful - show menu
       resetState(chatId);
-      await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
-      await bot.sendMessage(chatId, 'Select market type:', marketCategoryKeyboard());
+      
+      // Send market selection sticker
+      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath)) {
+        await bot.sendSticker(chatId, marketStickerPath);
+      }
+      
+      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
       
     } catch (error) {
       logger.error('Auto-start failed:', error);
@@ -981,7 +1074,7 @@ bot.on('message', async (msg) => {
       // Send the last buttons that were shown (or default to market selection)
       const state = chatState.get(chatId) || {};
       const buttonsToSend = state.lastButtons || marketCategoryKeyboard();
-      const buttonMessage = state.lastButtonsMessage || 'Select market type:';
+      const buttonMessage = state.lastButtonsMessage || 'Choose:';
       await bot.sendMessage(chatId, buttonMessage, buttonsToSend);
       
     } catch (error) {
@@ -1002,7 +1095,7 @@ How can I help you?`
       // Send last buttons even on error (or default to market selection)
       const state = chatState.get(chatId) || {};
       const buttonsToSend = state.lastButtons || marketCategoryKeyboard();
-      const buttonMessage = state.lastButtonsMessage || 'Select market type:';
+      const buttonMessage = state.lastButtonsMessage || 'Choose:';
       await bot.sendMessage(chatId, buttonMessage, buttonsToSend);
     }
   }

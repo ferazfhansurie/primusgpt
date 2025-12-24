@@ -40,7 +40,7 @@ const Register: React.FC = () => {
     }
 
     if (!formData.phone || !/^\+?[1-9]\d{6,14}$/.test(formData.phone.replace(/[\s\-()]/g, ''))) {
-      setError('Please enter a valid phone number with country code (e.g., +60123456789)');
+      setError('Please enter a valid phone number with country code (e.g., +971501234567)');
       return false;
     }
 
@@ -154,6 +154,11 @@ const Register: React.FC = () => {
   return (
     <div className="register-container">
       <div className="register-card">
+        <div className="sale-banner-register">
+          🎉 NEW YEAR SALE 🎉
+          <span className="sale-subtitle-register">Save Up To 25% - Limited Time!</span>
+        </div>
+        
         <h1 className="register-title">Register for <span className="text-gradient">PRIMUS GPT</span></h1>
         <p className="register-subtitle">
           Create your account to access AI-powered trading analysis
@@ -192,10 +197,10 @@ const Register: React.FC = () => {
               name="phone"
               value={formData.phone}
               onChange={handleChange}
-              placeholder="+60123456789"
+              placeholder="+971501234567"
               required
             />
-            <small>Include country code (e.g., +60 for Malaysia)</small>
+            <small>Include country code (e.g., +971 for UAE)</small>
           </div>
 
           <div className="form-row">

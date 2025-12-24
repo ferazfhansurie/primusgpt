@@ -4,7 +4,7 @@ import database from '../db/database.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim());
 
 // Subscription plans configuration
 const SUBSCRIPTION_PLANS = {
