@@ -57,28 +57,33 @@ SCALPING SOP:
    a) Most tested zone (multiple touches = stronger, 3+ touches ideal)
    b) Recent activity (zone tested within last 180 bars)
    c) Clean reactions (sharp bounces, strong rejections)
-   d) Zone proximity to current price (closer better, but not primary)
+   d) Zone proximity to current price (closer zones more actionable)
    
    SELECT THE BEST QUALITY zone from 180 bars - quality over proximity
 
-3. IDENTIFY CANDLESTICK PATTERNS:
+3. IDENTIFY CANDLESTICK PATTERNS & PRICE ACTION:
    - Review the detected patterns provided
-   - UPTREND → Look for BULLISH ENGULFING at SUPPORT
-   - DOWNTREND → Look for BEARISH ENGULFING at RESISTANCE
+   - AT RESISTANCE → Look for BEARISH patterns, rejections, wicks → SELL signal
+   - AT SUPPORT → Look for BULLISH patterns, bounces → BUY signal
    - Scan last 180 bars for patterns
+   
+   CRITICAL: If price is AT/NEAR a well-tested resistance showing rejections → SELL
+   CRITICAL: If price is AT/NEAR a well-tested support showing bounces → BUY
    
    QUALITY CRITERIA (prioritize BEST, not most recent):
    a) Pattern that OVERLAPS with support/resistance zone (HIGHEST PRIORITY)
    b) Pattern at well-tested zone (multiple touches = stronger)
    c) Strongest pattern (larger body, clearest signal)
-   d) Pattern proximity to current price (closer better, but not primary)
+   d) Current price action at the zone (rejections/bounces)
    
    SELECT THE HIGHEST QUALITY PATTERN - quality over recency
 
-4. MOMENTUM CONFIRMATION:
-   - Check if recent candles show strong momentum
-   - Review price action description
-   - Avoid choppy, indecisive action
+4. SIGNAL DECISION:
+   - BUY: Price at support + bullish pattern/bounce
+   - SELL: Price at resistance + bearish pattern/rejection
+   - WAIT: No clear pattern or price not at zone
+   
+   IMPORTANT: Don't wait if price is actively rejecting resistance or bouncing from support!
 
 5. MARK ZONE:
    - Mark TIGHT zones for scalping
@@ -120,27 +125,37 @@ ${primaryContext}
 
 SCALPING ENTRY SOP:
 
-1. IDENTIFY CONFIRMATION PATTERNS:
-   - Look for ${primaryAnalysis?.signal === 'buy' ? 'BULLISH' : primaryAnalysis?.signal === 'sell' ? 'BEARISH' : 'CONFIRMATION'} patterns
+1. IDENTIFY CONFIRMATION PATTERNS & PRICE ACTION:
+   - Look for ${primaryAnalysis?.signal === 'buy' ? 'BULLISH bounces/reversals' : primaryAnalysis?.signal === 'sell' ? 'BEARISH rejections/reversals' : 'CONFIRMATION'} patterns
    - Patterns: ${this.patterns.join(', ')}
    - Focus on patterns near ${primaryAnalysis?.zone_price_low}-${primaryAnalysis?.zone_price_high}
    - Scan last 180 bars
    
+   ${primaryAnalysis?.signal === 'sell' ? 'FOR SELL: Look for rejection wicks, bearish candles, failed breakouts at resistance' : ''}
+   ${primaryAnalysis?.signal === 'buy' ? 'FOR BUY: Look for bounce wicks, bullish candles, support holds' : ''}
+   
    SELECTION CRITERIA (prioritize BEST, not most recent):
    a) Pattern that overlaps or is NEAR 15-min zone - HIGH PRIORITY
-   b) Strongest pattern (clearest signal, larger body)
-   c) Pattern close to 15-min zone (within reasonable distance)
-   d) Pattern proximity to current price (closer better, but secondary)
+   b) Current price action showing rejection/bounce at zone
+   c) Strongest pattern (clearest signal, larger body/wicks)
+   d) Multiple recent touches showing zone strength
    
-   SELECT HIGHEST QUALITY PATTERN near the 15-min zone - quality over recency
+   SELECT HIGHEST QUALITY PATTERN near the 15-min zone
 
 2. CHECK PRICE ALIGNMENT:
    - Verify if pattern overlaps with or is near 15-min zone
    - Set inside_15min_zone to true if overlap exists or pattern is reasonably close
+   - IMPORTANT: If price is actively testing the zone, mark as inside
 
-3. TIGHT ENTRY ZONE:
-   - Mark precise entry zone
+3. ENTRY TIMING:
+   - immediate: Price actively testing zone with confirmation pattern
+   - wait: Pattern exists but price moved away from zone
+   - expired: Pattern too old or zone broken
+
+4. TIGHT ENTRY ZONE:
+   - Mark precise entry zone based on 5-min action
    - Keep zone width between ${config.zones.minPips}-${config.zones.maxPips} pips (flexible range)
+   - Use recent swing high/low for precision
    - Provide exact price high and low
 
 Return ONLY valid JSON:
@@ -332,12 +347,17 @@ Return ONLY valid JSON:
     
     let stop_loss, take_profit_1, take_profit_2;
     
-    if (primaryResult.signal === 'buy') {
+    // Determine signal type for calculations (use trend if signal is WAIT)
+    const effectiveSignal = primaryResult.signal !== 'wait' ? primaryResult.signal :
+                           primaryResult.micro_trend === 'bullish' ? 'buy' :
+                           primaryResult.micro_trend === 'bearish' ? 'sell' : 'buy';
+    
+    if (effectiveSignal === 'buy') {
       // For BUY: SL below zone, TP above zone
       stop_loss = entryResult.zone_price_low - pipDistance30;
       take_profit_1 = entryResult.zone_price_low + pipDistance30;
       take_profit_2 = entryResult.zone_price_low + pipDistance100;
-    } else if (primaryResult.signal === 'sell') {
+    } else if (effectiveSignal === 'sell') {
       // For SELL: SL above zone, TP below zone
       stop_loss = entryResult.zone_price_high + pipDistance30;
       take_profit_1 = entryResult.zone_price_high - pipDistance30;

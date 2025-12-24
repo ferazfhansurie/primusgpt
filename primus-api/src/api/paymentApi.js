@@ -193,11 +193,22 @@ router.get('/verify-session/:sessionId', async (req, res) => {
         stripe_customer_id,
         stripe_subscription_id,
         subscription_plan,
-        subscription_status
+        subscription_status,
+        trial_end,
+        subscription_end
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *;
     `;
+
+    // Calculate trial_end and subscription_end dates
+    const trialEnd = session.subscription?.trial_end 
+      ? new Date(session.subscription.trial_end * 1000) 
+      : null;
+    
+    const subscriptionEnd = session.subscription?.current_period_end
+      ? new Date(session.subscription.current_period_end * 1000)
+      : null;
 
     const result = await database.query(query, [
       email,
@@ -208,7 +219,9 @@ router.get('/verify-session/:sessionId', async (req, res) => {
       session.customer,
       session.subscription?.id || null,
       plan_id || 'quarterly',
-      session.subscription?.status || 'active'
+      session.subscription?.status || 'active',
+      trialEnd,
+      subscriptionEnd
     ]);
 
     const user = result.rows[0];
@@ -275,6 +288,15 @@ router.post('/webhook', async (req, res) => {
           // Retrieve subscription details
           const subscription = await stripe.subscriptions.retrieve(session.subscription);
           
+          // Calculate trial_end and subscription_end dates
+          const trialEnd = subscription.trial_end 
+            ? new Date(subscription.trial_end * 1000) 
+            : null;
+          
+          const subscriptionEnd = subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000)
+            : null;
+          
           // Create user in database
           const query = `
             INSERT INTO users (
@@ -286,9 +308,11 @@ router.post('/webhook', async (req, res) => {
               stripe_customer_id,
               stripe_subscription_id,
               subscription_plan,
-              subscription_status
+              subscription_status,
+              trial_end,
+              subscription_end
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *;
           `;
 
@@ -301,7 +325,9 @@ router.post('/webhook', async (req, res) => {
             session.customer,
             subscription.id,
             plan_id || 'quarterly',
-            subscription.status
+            subscription.status,
+            trialEnd,
+            subscriptionEnd
           ]);
 
           logger.success(`User auto-registered via webhook: ${email} - Plan: ${plan_id}`);
@@ -315,10 +341,19 @@ router.post('/webhook', async (req, res) => {
     case 'customer.subscription.updated': {
       const subscription = event.data.object;
       try {
-        // Update subscription status in database
+        // Calculate subscription dates
+        const trialEnd = subscription.trial_end 
+          ? new Date(subscription.trial_end * 1000) 
+          : null;
+        
+        const subscriptionEnd = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000)
+          : null;
+        
+        // Update subscription status and dates in database
         await database.query(
-          'UPDATE users SET subscription_status = $1 WHERE stripe_subscription_id = $2',
-          [subscription.status, subscription.id]
+          'UPDATE users SET subscription_status = $1, trial_end = $2, subscription_end = $3 WHERE stripe_subscription_id = $4',
+          [subscription.status, trialEnd, subscriptionEnd, subscription.id]
         );
         logger.info(`Subscription updated: ${subscription.id} - Status: ${subscription.status}`);
       } catch (error) {

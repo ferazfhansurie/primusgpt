@@ -30,8 +30,8 @@ class GPTAnalyzer {
       try {
         if (attempt > 1) {
           logger.info(`Retry attempt ${attempt}/${maxRetries}...`);
-          // Wait before retrying (exponential backoff)
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          // Wait before retrying (exponential backoff: 2s, 4s, 8s)
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
         } else {
           logger.info('Sending data to GPT for analysis...');
         }
@@ -45,17 +45,22 @@ class GPTAnalyzer {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
           ],
-          max_completion_tokens: this.maxTokens,
+
           response_format: { type: 'json_object' }
         });
 
-        const content = response.choices[0].message.content;
+        const content = response.choices[0]?.message?.content;
+        
+        // Validate response structure
+        if (!response.choices || response.choices.length === 0) {
+          throw new Error('No choices in GPT response');
+        }
         
         // Log raw response for debugging
         logger.debug('Raw GPT response length:', content?.length || 0);
         
         if (!content || content.trim().length === 0) {
-          throw new Error('Empty response from GPT');
+          throw new Error('Empty response from GPT - possibly rate limited or model issue');
         }
 
         // Try to parse JSON with better error handling

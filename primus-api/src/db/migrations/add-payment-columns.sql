@@ -6,7 +6,9 @@ ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255),
 ADD COLUMN IF NOT EXISTS subscription_plan VARCHAR(50),
 ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50),
 ADD COLUMN IF NOT EXISTS payment_amount INTEGER,
-ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP,
+ADD COLUMN IF NOT EXISTS subscription_end TIMESTAMP;
 
 -- Create indexes for payment and subscription queries
 CREATE INDEX IF NOT EXISTS idx_users_payment_status ON users(payment_status);

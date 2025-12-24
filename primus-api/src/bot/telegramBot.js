@@ -53,6 +53,107 @@ function resetState(chatId) {
   });
 }
 
+// Helper function to get subscription/trial time remaining
+function getSubscriptionTimeRemaining(user) {
+  const now = new Date();
+  
+  // Check trial period first
+  if (user.trial_end) {
+    const trialEnd = new Date(user.trial_end);
+    if (trialEnd > now) {
+      const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+      const planName = (user.subscription_plan || 'Premium').charAt(0).toUpperCase() + (user.subscription_plan || 'Premium').slice(1);
+      const expiryDate = trialEnd.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      
+      return {
+        type: 'trial',
+        daysLeft,
+        endDate: trialEnd,
+        message: `━━━━━━━━━━━━━━━━━━━━━━━━
+📊 ACCOUNT STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎁 Plan: ${planName} (Trial Period)
+⏰ Time Remaining: ${daysLeft} day${daysLeft !== 1 ? 's' : ''}
+📅 Expires: ${expiryDate}
+💎 Status: Active
+
+━━━━━━━━━━━━━━━━━━━━━━━━`
+      };
+    }
+  }
+  
+  // Check subscription - always show days remaining if we have subscription_end
+  if (user.subscription_end) {
+    const subEnd = new Date(user.subscription_end);
+    const daysLeft = Math.ceil((subEnd - now) / (1000 * 60 * 60 * 24));
+    
+    if (daysLeft > 0) {
+      const planName = (user.subscription_plan || 'Premium').charAt(0).toUpperCase() + (user.subscription_plan || 'Premium').slice(1);
+      const expiryDate = subEnd.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const statusEmoji = daysLeft <= 7 ? '⚠️' : '✅';
+      const urgency = daysLeft <= 7 ? ' (Expiring Soon!)' : '';
+      
+      return {
+        type: 'subscription',
+        daysLeft,
+        endDate: subEnd,
+        message: `━━━━━━━━━━━━━━━━━━━━━━━━
+📊 ACCOUNT STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+💎 Plan: ${planName}
+⏰ Time Remaining: ${daysLeft} day${daysLeft !== 1 ? 's' : ''}${urgency}
+📅 Renewal Date: ${expiryDate}
+${statusEmoji} Status: Active
+
+━━━━━━━━━━━━━━━━━━━━━━━━`
+      };
+    }
+  }
+  
+  // Expired or no subscription
+  return {
+    type: 'expired',
+    message: `━━━━━━━━━━━━━━━━━━━━━━━━
+📊 ACCOUNT STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Status: Subscription Expired
+⚠️ Access: Limited
+
+💡 Renew your subscription to continue
+   accessing premium features.
+
+━━━━━━━━━━━━━━━━━━━━━━━━`,
+    needsRenewal: true
+  };
+}
+
+// Helper function to build subscription keyboard
+function getSubscriptionKeyboard(subscriptionInfo) {
+  const buttons = [];
+  
+  if (subscriptionInfo.needsRenewal || subscriptionInfo.type === 'expired') {
+    buttons.push([
+      { text: '💳 Subscribe Now', url: process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register' }
+    ]);
+  } else if (subscriptionInfo.type === 'trial' || subscriptionInfo.type === 'subscription') {
+    // Always show renewal/extend option for active subscriptions
+    if (subscriptionInfo.daysLeft && subscriptionInfo.daysLeft <= 7) {
+      buttons.push([
+        { text: 'Renew Subscription', url: process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register' }
+      ]);
+    } else {
+      buttons.push([
+        { text: 'Extend Subscription', url: process.env.WEB_REGISTRATION_URL || 'https://primusgpt-ai.vercel.app/register' }
+      ]);
+    }
+  }
+  
+  return buttons;
+}
+
 function getMarketCategories() {
   return [
     { name: 'Forex', key: 'forex' },
@@ -87,8 +188,7 @@ function marketCategoryKeyboard() {
         [
           { text: 'Forex', callback_data: 'market:forex' },
           { text: 'Gold', callback_data: 'market:gold' }
-        ],
-        [ { text: 'Cancel', callback_data: 'cancel' } ]
+        ]
       ]
     }
   };
@@ -205,9 +305,34 @@ bot.onText(/^\/start/, async (msg) => {
             await bot.sendSticker(chatId, welcomeStickerPath);
           }
 
+          // Get subscription info and show welcome message
+          const subscriptionInfo = getSubscriptionTimeRemaining(user);
+          const welcomeMsg = `Welcome back, ${user.first_name || 'Trader'}!
+
+${subscriptionInfo.message}`;
+          const subscriptionButtons = getSubscriptionKeyboard(subscriptionInfo);
+          
           resetState(chatId);
-            //  await bot.sendMessage(chatId, `LOGIN SUCCESSFUL\n\nWelcome back, ${user.first_name || 'Trader'}.\n\n` + helpMsg);
-          await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
+          
+          // Send welcome message with subscription buttons if needed
+          if (subscriptionButtons.length > 0) {
+            await bot.sendMessage(chatId, welcomeMsg, {
+              reply_markup: {
+                inline_keyboard: subscriptionButtons
+              }
+            });
+          } else {
+            await bot.sendMessage(chatId, welcomeMsg);
+          }
+          
+          // Send market selection sticker
+          const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+          if (fs.existsSync(marketStickerPath)) {
+            await bot.sendSticker(chatId, marketStickerPath);
+          }
+          
+          // Send market selection
+          await sendButtonsAndTrack(chatId, 'Select your market:', marketCategoryKeyboard());
           await database.logLoginAttempt(chatId, true, 'credentials_login');
           return;
         } else {
@@ -243,30 +368,46 @@ bot.onText(/^\/start/, async (msg) => {
       resetState(chatId);
       await conversationManager.updateState(chatId, 'market');
       
-      // Send welcome sticker, then replace with market selection
-      let stickerMessageId = null;
+      // Get user info for subscription status
+      const user = await database.getUserByTelegramId(chatId);
+      
+      // Send welcome sticker
       const welcomeStickerPath = path.join(__dirname, '../../stickers/WELCOME.webm');
       if (fs.existsSync(welcomeStickerPath)) {
-        const welcomeMsg = await bot.sendSticker(chatId, welcomeStickerPath);
-        stickerMessageId = welcomeMsg.message_id;
-        // Wait a moment before switching
+        await bot.sendSticker(chatId, welcomeStickerPath);
+        // Wait a moment before continuing
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
       
-      // Delete welcome sticker and send market selection sticker
-      if (stickerMessageId) {
-        await bot.deleteMessage(chatId, stickerMessageId).catch(() => {});
+      // Build welcome message with subscription info
+      const subscriptionInfo = getSubscriptionTimeRemaining(user);
+      const welcomeMsg = `Welcome back, ${user.first_name || user.telegram_first_name || 'Trader'}!
+
+${subscriptionInfo.message}`;
+      const subscriptionButtons = getSubscriptionKeyboard(subscriptionInfo);
+      
+      // Send welcome message with subscription buttons if needed
+      if (subscriptionButtons.length > 0) {
+        await bot.sendMessage(chatId, welcomeMsg, {
+          reply_markup: {
+            inline_keyboard: subscriptionButtons
+          }
+        });
+      } else {
+        await bot.sendMessage(chatId, welcomeMsg);
       }
       
-      const marketStickerPath = path.join(__dirname, '../../stickers/SelectMarketType.webm');
-      if (fs.existsSync(marketStickerPath)) {
-        await bot.sendSticker(chatId, marketStickerPath);
+      // Send market selection sticker
+      const marketStickerPath2 = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath2)) {
+        await bot.sendSticker(chatId, marketStickerPath2);
       }
       
-      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
+      // Send market selection
+      await sendButtonsAndTrack(chatId, 'Select your market:', marketCategoryKeyboard());
       
       // Save bot response
-      await conversationManager.saveMessage(chatId, 'bot', 'Welcome back! Select market type.');
+      await conversationManager.saveMessage(chatId, 'bot', welcomeMsg);
       return;
     }
 
@@ -311,10 +452,35 @@ bot.onText(/^\/start/, async (msg) => {
       await bot.sendSticker(chatId, welcomeStickerPath);
     }
 
-    // Login successful - proceed to market selection
+    // Login successful - proceed to market selection with subscription info
     resetState(chatId);
-    //await bot.sendMessage(chatId, `Welcome back, ${user.telegram_first_name || user.first_name || 'Trader'}.\n\n` + helpMsg);
-    await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
+    
+    // Get subscription info and show welcome message
+    const subscriptionInfo = getSubscriptionTimeRemaining(user);
+    const welcomeMsg = `👋 Welcome to PRIMUS GPT, ${user.telegram_first_name || user.first_name || 'Trader'}!
+
+${subscriptionInfo.message}`;
+    const subscriptionButtons = getSubscriptionKeyboard(subscriptionInfo);
+    
+    // Send welcome message with subscription buttons if needed
+    if (subscriptionButtons.length > 0) {
+      await bot.sendMessage(chatId, welcomeMsg, {
+        reply_markup: {
+          inline_keyboard: subscriptionButtons
+        }
+      });
+    } else {
+      await bot.sendMessage(chatId, welcomeMsg);
+    }
+    
+    // Send market selection sticker
+    const marketStickerPath3 = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+    if (fs.existsSync(marketStickerPath3)) {
+      await bot.sendSticker(chatId, marketStickerPath3);
+    }
+    
+    // Send market selection
+    await sendButtonsAndTrack(chatId, '📈 Let\'s start analyzing the markets!', marketCategoryKeyboard());
 
   } catch (error) {
     logger.error('Start command failed:', error);
@@ -583,7 +749,7 @@ bot.on('callback_query', async (query) => {
         await bot.sendSticker(chatId, strategyStickerPath);
       }
       
-      await sendButtonsAndTrack(chatId, 'Choose:', strategyKeyboard());
+      await sendButtonsAndTrack(chatId, 'Choose your strategy:', strategyKeyboard());
       return;
     }
     
@@ -597,7 +763,7 @@ bot.on('callback_query', async (query) => {
       await bot.sendSticker(chatId, pairStickerPath);
     }
     
-    await sendButtonsAndTrack(chatId, 'Choose:', instrumentsKeyboard(market));
+    await sendButtonsAndTrack(chatId, 'Choose your pair:', instrumentsKeyboard(market));
     return;
   }
 
@@ -797,25 +963,27 @@ bot.on('callback_query', async (query) => {
       caption += `Signal: ${statusLabel}\n`;
       caption += `Confidence: ${confidence}%\n`;
 
-      // Add zone info with emojis
-      const zone = result.daily_zone || result.primary_zone;
+      // Add zone info with emojis based on signal direction
+      const zone = result.entry_zone || result.daily_zone || result.primary_zone;
       if (zone && zone.price_low && zone.price_high) {
-        caption += `\n🔴 Sell Zone:\n`;
-        caption += `${zone.price_low} - ${zone.price_high}\n`;
-        
-        caption += `\n🟢 Buy Zone:\n`;
-        caption += `${zone.price_low} - ${zone.price_high}\n`;
+        if (result.signal === 'buy') {
+          caption += `\n🟢 Buy Zone:\n`;
+          caption += `${zone.price_low.toFixed(5)} - ${zone.price_high.toFixed(5)}\n`;
+        } else if (result.signal === 'sell') {
+          caption += `\n🔴 Sell Zone:\n`;
+          caption += `${zone.price_low.toFixed(5)} - ${zone.price_high.toFixed(5)}\n`;
+        }
       }
 
       // Add SL and TP levels with emojis - show actual prices
       if (result.stop_loss) {
-        caption += `\n🛑 SL : ${result.stop_loss.toFixed(2)}\n`;
+        caption += `\n🛑 SL: ${result.stop_loss.toFixed(5)}\n`;
       }
       if (result.take_profit_1) {
-        caption += `✅ TP1 : ${result.take_profit_1.toFixed(2)}\n`;
+        caption += `✅ TP1: ${result.take_profit_1.toFixed(5)}\n`;
       }
       if (result.take_profit_2) {
-        caption += `✅ TP2 : ${result.take_profit_2.toFixed(2)}\n`;
+        caption += `✅ TP2: ${result.take_profit_2.toFixed(5)}\n`;
       }
 
       // Add timeframe at the end
@@ -943,7 +1111,32 @@ bot.on('message', async (msg) => {
         await bot.sendSticker(chatId, marketStickerPath);
       }
 
-      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
+      // Build welcome message with subscription info
+      const subscriptionInfo = getSubscriptionTimeRemaining(user);
+      const welcomeMsg = `Welcome back, ${user.first_name || 'Trader'}!
+
+${subscriptionInfo.message}`;
+      const subscriptionButtons = getSubscriptionKeyboard(subscriptionInfo);
+      
+      // Send welcome message with subscription buttons if needed
+      if (subscriptionButtons.length > 0) {
+        await bot.sendMessage(chatId, welcomeMsg, {
+          reply_markup: {
+            inline_keyboard: subscriptionButtons
+          }
+        });
+      } else {
+        await bot.sendMessage(chatId, welcomeMsg);
+      }
+      
+      // Send market selection sticker
+      const marketStickerPath4 = path.join(__dirname, '../../stickers/SelectMarketType.webm');
+      if (fs.existsSync(marketStickerPath4)) {
+        await bot.sendSticker(chatId, marketStickerPath4);
+      }
+      
+      // Send market selection
+      await sendButtonsAndTrack(chatId, 'Select your market:', marketCategoryKeyboard());
       
       await database.logLoginAttempt(chatId, true, 'phone_login');
       return;
@@ -1007,7 +1200,7 @@ bot.on('message', async (msg) => {
         await bot.sendSticker(chatId, welcomeStickerPath);
       }
 
-      // Auto-login successful - show menu
+      // Auto-login successful - show menu with subscription info
       resetState(chatId);
       
       // Send market selection sticker
@@ -1016,7 +1209,21 @@ bot.on('message', async (msg) => {
         await bot.sendSticker(chatId, marketStickerPath);
       }
       
-      await sendButtonsAndTrack(chatId, 'Choose:', marketCategoryKeyboard());
+      // Build welcome message with subscription info
+      const subscriptionInfo = getSubscriptionTimeRemaining(user);
+      const welcomeMsg = `Welcome, ${user.telegram_first_name || user.first_name || 'Trader'}!\n\n${subscriptionInfo.message}\n\nChoose:`;
+      const subscriptionButtons = getSubscriptionKeyboard(subscriptionInfo);
+      const marketKeyboard = marketCategoryKeyboard();
+      
+      // Combine subscription buttons with market selection
+      if (subscriptionButtons.length > 0) {
+        marketKeyboard.reply_markup.inline_keyboard = [
+          ...subscriptionButtons,
+          ...marketKeyboard.reply_markup.inline_keyboard
+        ];
+      }
+      
+      await sendButtonsAndTrack(chatId, welcomeMsg, marketKeyboard);
       
     } catch (error) {
       logger.error('Auto-start failed:', error);
