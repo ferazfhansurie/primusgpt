@@ -629,8 +629,8 @@ bot.on('callback_query', async (query) => {
         await bot.sendSticker(chatId, detailedStickerPath);
       }
       
-      const detailedMsg = `${lastAnalysis.pair} | ${lastAnalysis.strategy.toUpperCase()}\n\n${lastAnalysis.fullAnalysis}`;
-      await bot.sendMessage(chatId, detailedMsg);
+      const detailedMsg = `*${lastAnalysis.pair}* | ${lastAnalysis.strategy.toUpperCase()}\n\n${formatDetailedAnalysis(lastAnalysis.fullAnalysis)}`;
+      await bot.sendMessage(chatId, detailedMsg, { parse_mode: 'Markdown' });
       // Send the same action buttons after detailed analysis
       await bot.sendMessage(chatId, 'What would you like to do next?', retryKeyboard(state.pair, state.strategy, false));
     } else {
@@ -957,10 +957,10 @@ bot.on('callback_query', async (query) => {
       const confidence = (result.confidence * 100).toFixed(1);
       const validStatus = result.valid ? 'VALID' : 'INVALID';
 
-      let caption = `📊 PRIMUS GPT Analysis\n`;
-      caption += `${state.pair} | ${strategy.toUpperCase()}\n`;
+      let caption = `📊 *_PRIMUS GPT Analysis_*\n`;
+      caption += `*${state.pair}* | ${strategy.toUpperCase()}\n`;
       caption += `Status: ${validStatus}\n`;
-      caption += `Signal: ${statusLabel}\n`;
+      caption += `_Signal:_ ${statusLabel}\n`;
       caption += `Confidence: ${confidence}%\n`;
 
       // Add zone info with emojis based on signal direction
@@ -1011,7 +1011,8 @@ bot.on('callback_query', async (query) => {
         const bottomChart = result.charts[result.charts.length - 1];
         if (fs.existsSync(bottomChart.path)) {
           await bot.sendPhoto(chatId, bottomChart.path, { 
-            caption: caption.substring(0, 1024) // Telegram caption limit
+            caption: caption.substring(0, 1024), // Telegram caption limit
+            parse_mode: "Markdown"
           });
         }
       }
@@ -1372,6 +1373,22 @@ function extractShortAnalysis(result) {
   
   if (points.length === 0) return '';
   return '\nAnalysis:\n' + points.join('\n');
+}
+
+
+function formatDetailedAnalysis(text) {
+  if (!text) return '';
+
+  // Split by sentences and format as bullet points
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  if (sentences.length === 0) return text;
+
+  // Format each sentence as a bullet point
+  return sentences.map(s => '• ' + s).join('\n\n');
 }
 
 function extractReasoning(result) {
