@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-//
+
 export const config = {
   runtime: 'edge',
 };
@@ -32,13 +32,30 @@ export default async function handler(request) {
     const {
       event_type = 'pageview',
       page_path,
+      page_title,
       referrer,
       user_agent,
       screen_width,
       screen_height,
+      viewport_width,
+      viewport_height,
       language,
+      languages,
       timezone,
       visitor_id,
+      session_id,
+      session_duration,
+      device_type,
+      browser,
+      os,
+      connection_type,
+      is_returning,
+      color_depth,
+      pixel_ratio,
+      touch_support,
+      utm_source,
+      utm_medium,
+      utm_campaign,
     } = body;
 
     // Get IP and country from headers (Vercel provides these)
@@ -47,17 +64,24 @@ export default async function handler(request) {
                'unknown';
     const country = request.headers.get('x-vercel-ip-country') || 'unknown';
     const city = request.headers.get('x-vercel-ip-city') || 'unknown';
+    const region = request.headers.get('x-vercel-ip-country-region') || 'unknown';
 
-    // Insert the event
+    // Insert the event with new fields
     await sql`
       INSERT INTO analytics_events (
-        event_type, page_path, referrer, user_agent,
-        ip_address, country, city, screen_width, screen_height,
-        language, timezone, visitor_id, created_at
+        event_type, page_path, page_title, referrer, user_agent,
+        ip_address, country, city, region, screen_width, screen_height,
+        viewport_width, viewport_height, language, languages, timezone,
+        visitor_id, session_id, session_duration, device_type, browser, os,
+        connection_type, is_returning, color_depth, pixel_ratio, touch_support,
+        utm_source, utm_medium, utm_campaign, created_at
       ) VALUES (
-        ${event_type}, ${page_path}, ${referrer || 'direct'}, ${user_agent},
-        ${ip}, ${country}, ${city}, ${screen_width || null}, ${screen_height || null},
-        ${language || 'unknown'}, ${timezone || 'unknown'}, ${visitor_id}, NOW()
+        ${event_type}, ${page_path}, ${page_title || null}, ${referrer || 'direct'}, ${user_agent},
+        ${ip}, ${country}, ${city}, ${region}, ${screen_width || null}, ${screen_height || null},
+        ${viewport_width || null}, ${viewport_height || null}, ${language || 'unknown'}, ${languages || null}, ${timezone || 'unknown'},
+        ${visitor_id}, ${session_id || null}, ${session_duration || 0}, ${device_type || null}, ${browser || null}, ${os || null},
+        ${connection_type || null}, ${is_returning || false}, ${color_depth || null}, ${pixel_ratio || null}, ${touch_support || false},
+        ${utm_source || null}, ${utm_medium || null}, ${utm_campaign || null}, NOW()
       )
     `;
 

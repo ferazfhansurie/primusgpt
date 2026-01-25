@@ -12,7 +12,6 @@ const API_URL = import.meta.env.PROD
 
 const COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
 
-// Country code to flag emoji mapping
 const countryFlags: { [key: string]: string } = {
   'MY': '🇲🇾', 'US': '🇺🇸', 'GB': '🇬🇧', 'SG': '🇸🇬', 'IN': '🇮🇳', 'AU': '🇦🇺',
   'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵', 'KR': '🇰🇷', 'CN': '🇨🇳', 'ID': '🇮🇩',
@@ -24,16 +23,35 @@ const countryFlags: { [key: string]: string } = {
   'IE': '🇮🇪', 'CH': '🇨🇭', 'AT': '🇦🇹', 'BE': '🇧🇪', 'PT': '🇵🇹', 'GR': '🇬🇷',
 };
 
+const languageNames: { [key: string]: string } = {
+  'en': 'English', 'ms': 'Malay', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean',
+  'es': 'Spanish', 'fr': 'French', 'de': 'German', 'pt': 'Portuguese', 'ru': 'Russian',
+  'ar': 'Arabic', 'hi': 'Hindi', 'id': 'Indonesian', 'th': 'Thai', 'vi': 'Vietnamese',
+};
+
 const getFlag = (country: string) => countryFlags[country] || '🌍';
+const getLangName = (code: string) => languageNames[code] || code.toUpperCase();
+
+const formatDuration = (seconds: number) => {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}m ${secs}s`;
+};
 
 interface AnalyticsData {
   overview: {
     totalPageviews: number;
     totalVisitors: number;
+    totalSessions: number;
     visitorsToday: number;
     pageviewsToday: number;
     visitorsWeek: number;
     pageviewsWeek: number;
+    avgSessionDuration: number;
+    returningVisitors: number;
+    newVisitors: number;
+    liveVisitors: number;
   };
   users: {
     totalUsers: number;
@@ -55,19 +73,29 @@ interface AnalyticsData {
     sellSignals: number;
     avgConfidence: number;
   };
-  pageviewsByDay: Array<{ date: string; pageviews: number; visitors: number }>;
-  topPages: Array<{ page_path: string; views: number; visitors: number }>;
+  pageviewsByDay: Array<{ date: string; pageviews: number; visitors: number; sessions: number }>;
+  hourlyTraffic: Array<{ hour: number; pageviews: number; visitors: number }>;
+  topPages: Array<{ page_path: string; views: number; visitors: number; avg_time: number }>;
   topReferrers: Array<{ source: string; visits: number; visitors: number }>;
   countries: Array<{ country: string; visits: number; visitors: number }>;
+  cities: Array<{ city: string; country: string; visits: number; visitors: number }>;
   devices: Array<{ device: string; visits: number; visitors: number }>;
   browsers: Array<{ browser: string; visits: number; visitors: number }>;
   operatingSystems: Array<{ os: string; visits: number; visitors: number }>;
+  languages: Array<{ lang: string; visits: number; visitors: number }>;
+  screenSizes: Array<{ size_group: string; visits: number; visitors: number }>;
+  connectionTypes: Array<{ connection: string; visits: number; visitors: number }>;
+  utmCampaigns: Array<{ utm_source: string; utm_medium: string; utm_campaign: string; visits: number; visitors: number }>;
   recentVisitors: Array<{
     visitor_id: string;
     page_path: string;
     country: string;
     city: string;
     device: string;
+    browser: string;
+    os: string;
+    session_duration: number;
+    is_returning: boolean;
     created_at: string;
   }>;
   recentUsers: Array<{
@@ -101,6 +129,14 @@ export default function Analytics() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
+    }
+  }, [isAuthenticated, timeRange]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (isAuthenticated) {
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated, timeRange]);
 
@@ -138,109 +174,187 @@ export default function Analytics() {
 
   if (!isAuthenticated) {
     return (
-      <div style={styles.loginContainer}>
-        <div style={styles.loginCard}>
-          <div style={styles.loginLogo}>📊</div>
-          <h1 style={styles.loginTitle}>Analytics Dashboard</h1>
-          <p style={styles.loginSubtitle}>Enter password to access</p>
-          <form onSubmit={handleLogin} style={styles.loginForm}>
+      <div className="login-container">
+        <div className="login-card">
+          <div className="login-logo">
+            <div className="logo-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 3v18h18" />
+                <path d="M18 9l-5-6-4 8-3-4" />
+              </svg>
+            </div>
+          </div>
+          <h1 className="login-title">Analytics</h1>
+          <p className="login-subtitle">Enter password to access dashboard</p>
+          <form onSubmit={handleLogin} className="login-form">
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              style={styles.loginInput}
+              className="login-input"
               autoFocus
             />
-            {error && <p style={styles.loginError}>{error}</p>}
-            <button type="submit" style={styles.loginButton}>Access Dashboard</button>
+            {error && <p className="login-error">{error}</p>}
+            <button type="submit" className="login-button">
+              Access Dashboard
+            </button>
           </form>
         </div>
+        <style>{loginStyles}</style>
       </div>
     );
   }
 
   if (loading && !data) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner} />
-        <p style={styles.loadingText}>Loading analytics...</p>
+      <div className="loading-container">
+        <div className="loading-spinner" />
+        <p className="loading-text">Loading analytics...</p>
+        <style>{loadingStyles}</style>
       </div>
     );
   }
 
   const totalVisitorsForPercent = data?.countries.reduce((sum, c) => sum + Number(c.visitors), 0) || 1;
 
+  // Prepare hourly data with all 24 hours
+  const fullHourlyData = Array.from({ length: 24 }, (_, i) => {
+    const found = data?.hourlyTraffic?.find(h => Number(h.hour) === i);
+    return {
+      hour: i,
+      label: `${i.toString().padStart(2, '0')}:00`,
+      pageviews: found ? Number(found.pageviews) : 0,
+      visitors: found ? Number(found.visitors) : 0,
+    };
+  });
+
   return (
-    <div style={styles.container}>
+    <div className="analytics-container">
+      <style>{dashboardStyles}</style>
+
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <h1 style={styles.headerTitle}>📊 PrimusGPT Analytics</h1>
-          <span style={styles.headerBadge}>● Live</span>
+      <header className="header">
+        <div className="header-left">
+          <h1 className="header-title">
+            <span className="header-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="24" height="24">
+                <path d="M3 3v18h18" />
+                <path d="M18 9l-5-6-4 8-3-4" />
+              </svg>
+            </span>
+            Analytics
+          </h1>
+          {data && data.overview.liveVisitors > 0 && (
+            <span className="live-badge">
+              <span className="live-dot" />
+              {data.overview.liveVisitors} live
+            </span>
+          )}
         </div>
-        <div style={styles.headerRight}>
-          <select value={timeRange} onChange={(e) => setTimeRange(parseInt(e.target.value))} style={styles.timeSelect}>
+        <div className="header-right">
+          <select value={timeRange} onChange={(e) => setTimeRange(parseInt(e.target.value))} className="time-select">
             <option value={1}>Today</option>
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
           </select>
-          <button onClick={fetchData} style={styles.refreshButton} disabled={loading}>
-            {loading ? '...' : '↻'} Refresh
+          <button onClick={fetchData} className="refresh-btn" disabled={loading}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className={loading ? 'spin' : ''}>
+              <path d="M21 12a9 9 0 11-6.219-8.56" />
+            </svg>
+            Refresh
           </button>
         </div>
       </header>
 
       {/* Section Tabs */}
-      <nav style={styles.sectionTabs}>
+      <nav className="section-tabs">
         <button
           onClick={() => setActiveSection('site')}
-          style={{ ...styles.sectionTab, ...(activeSection === 'site' ? styles.sectionTabActive : {}) }}
+          className={`section-tab ${activeSection === 'site' ? 'active' : ''}`}
         >
-          🌐 Site Tracking
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+          </svg>
+          Site Tracking
         </button>
         <button
           onClick={() => setActiveSection('database')}
-          style={{ ...styles.sectionTab, ...(activeSection === 'database' ? styles.sectionTabActive : {}) }}
+          className={`section-tab ${activeSection === 'database' ? 'active' : ''}`}
         >
-          🗄️ Database
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
+          Database
         </button>
       </nav>
 
-      {error && <div style={styles.errorBanner}>{error}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
-      <main style={styles.main}>
+      <main className="main">
         {/* SITE TRACKING SECTION */}
         {activeSection === 'site' && data && (
           <>
             {/* Overview Stats */}
-            <div style={styles.statsGrid}>
-              <StatCard title="Total Visitors" value={data.overview.totalVisitors} subValue={`+${data.overview.visitorsToday} today`} icon="👥" gradient="purple" />
-              <StatCard title="Page Views" value={data.overview.totalPageviews} subValue={`+${data.overview.pageviewsToday} today`} icon="👁️" gradient="cyan" />
-              <StatCard title="This Week" value={data.overview.visitorsWeek} subValue="unique visitors" icon="📈" gradient="green" />
-              <StatCard title="Bounce Rate" value={0} subValue="coming soon" icon="↩️" gradient="orange" />
+            <div className="stats-grid">
+              <StatCard
+                title="Total Visitors"
+                value={data.overview.totalVisitors}
+                subValue={`+${data.overview.visitorsToday} today`}
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>}
+                color="purple"
+              />
+              <StatCard
+                title="Page Views"
+                value={data.overview.totalPageviews}
+                subValue={`+${data.overview.pageviewsToday} today`}
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>}
+                color="cyan"
+              />
+              <StatCard
+                title="Avg. Session"
+                value={formatDuration(data.overview.avgSessionDuration)}
+                subValue="duration"
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>}
+                color="green"
+                isText
+              />
+              <StatCard
+                title="Returning"
+                value={data.overview.totalVisitors > 0 ? Math.round((data.overview.returningVisitors / data.overview.totalVisitors) * 100) : 0}
+                subValue="% of visitors"
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4" /><path d="M5 10h11a4 4 0 110 8h-1" /></svg>}
+                color="orange"
+                isPercent
+              />
             </div>
 
             {/* Traffic Chart */}
-            <div style={styles.card}>
-              <h3 style={styles.cardTitle}>Traffic Overview</h3>
-              <ResponsiveContainer width="100%" height={280}>
+            <div className="card">
+              <h3 className="card-title">Traffic Overview</h3>
+              <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={data.pageviewsByDay.slice().reverse()}>
                   <defs>
                     <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorPageviews" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" tickFormatter={(val) => format(new Date(val), 'MMM d')} fontSize={12} />
-                  <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                  <Tooltip contentStyle={styles.tooltip} labelFormatter={(val) => format(new Date(val), 'MMMM d, yyyy')} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" tickFormatter={(val) => format(new Date(val), 'MMM d')} fontSize={11} />
+                  <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+                    labelFormatter={(val) => format(new Date(val), 'MMMM d, yyyy')}
+                  />
                   <Legend />
                   <Area type="monotone" dataKey="visitors" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorVisitors)" name="Visitors" />
                   <Area type="monotone" dataKey="pageviews" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorPageviews)" name="Page Views" />
@@ -248,115 +362,220 @@ export default function Analytics() {
               </ResponsiveContainer>
             </div>
 
-            {/* Countries Section - PROMINENT */}
-            <div style={styles.card}>
-              <h3 style={styles.cardTitle}>🌍 Countries</h3>
-              <div style={styles.countriesGrid}>
-                {data.countries.length > 0 ? data.countries.map((c, i) => (
-                  <div key={i} style={styles.countryRow}>
-                    <div style={styles.countryInfo}>
-                      <span style={styles.countryFlag}>{getFlag(c.country)}</span>
-                      <span style={styles.countryName}>{c.country}</span>
-                    </div>
-                    <div style={styles.countryStats}>
-                      <div style={styles.countryBar}>
-                        <div style={{ ...styles.countryBarFill, width: `${(Number(c.visitors) / totalVisitorsForPercent) * 100}%` }} />
+            {/* Hourly Traffic */}
+            <div className="card">
+              <h3 className="card-title">Hourly Traffic (Last 24h)</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={fullHourlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="label" stroke="rgba(255,255,255,0.4)" fontSize={10} interval={2} />
+                  <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                  />
+                  <Bar dataKey="visitors" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Visitors" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Countries & Cities */}
+            <div className="two-column">
+              <div className="card">
+                <h3 className="card-title">Countries</h3>
+                <div className="countries-list">
+                  {data.countries.length > 0 ? data.countries.slice(0, 10).map((c, i) => (
+                    <div key={i} className="country-row">
+                      <div className="country-info">
+                        <span className="country-flag">{getFlag(c.country)}</span>
+                        <span className="country-name">{c.country}</span>
                       </div>
-                      <span style={styles.countryPercent}>{((Number(c.visitors) / totalVisitorsForPercent) * 100).toFixed(0)}%</span>
-                      <span style={styles.countryVisitors}>{c.visitors}</span>
+                      <div className="country-stats">
+                        <div className="country-bar">
+                          <div className="country-bar-fill" style={{ width: `${(Number(c.visitors) / totalVisitorsForPercent) * 100}%` }} />
+                        </div>
+                        <span className="country-value">{c.visitors}</span>
+                      </div>
                     </div>
-                  </div>
-                )) : <div style={styles.noData}>No country data yet</div>}
+                  )) : <div className="no-data">No country data yet</div>}
+                </div>
+              </div>
+
+              <div className="card">
+                <h3 className="card-title">Top Cities</h3>
+                <div className="countries-list">
+                  {data.cities?.length > 0 ? data.cities.slice(0, 10).map((c, i) => (
+                    <div key={i} className="country-row">
+                      <div className="country-info">
+                        <span className="country-flag">{getFlag(c.country)}</span>
+                        <span className="country-name">{c.city}</span>
+                      </div>
+                      <div className="country-stats">
+                        <span className="country-value">{c.visitors}</span>
+                      </div>
+                    </div>
+                  )) : <div className="no-data">No city data yet</div>}
+                </div>
               </div>
             </div>
 
             {/* Devices, Browsers, OS */}
-            <div style={styles.threeColumn}>
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>📱 Devices</h3>
+            <div className="three-column">
+              <div className="card">
+                <h3 className="card-title">Devices</h3>
                 {data.devices.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={data.devices} dataKey="visitors" nameKey="device" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={data.devices} dataKey="visitors" nameKey="device" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
                         {data.devices.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
-                      <Tooltip contentStyle={styles.tooltip} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No data</div>}
+                ) : <div className="no-data">No data</div>}
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🌐 Browsers</h3>
+              <div className="card">
+                <h3 className="card-title">Browsers</h3>
                 {data.browsers.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={data.browsers} dataKey="visitors" nameKey="browser" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={data.browsers} dataKey="visitors" nameKey="browser" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
                         {data.browsers.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
-                      <Tooltip contentStyle={styles.tooltip} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No data</div>}
+                ) : <div className="no-data">No data</div>}
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>💻 Operating Systems</h3>
+              <div className="card">
+                <h3 className="card-title">Operating Systems</h3>
                 {data.operatingSystems.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={data.operatingSystems} dataKey="visitors" nameKey="os" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
+                      <Pie data={data.operatingSystems} dataKey="visitors" nameKey="os" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
                         {data.operatingSystems.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
-                      <Tooltip contentStyle={styles.tooltip} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No data</div>}
+                ) : <div className="no-data">No data</div>}
+              </div>
+            </div>
+
+            {/* Languages & Screen Sizes */}
+            <div className="two-column">
+              <div className="card">
+                <h3 className="card-title">Languages</h3>
+                {data.languages?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={data.languages.slice(0, 6)} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis type="number" stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                      <YAxis dataKey="lang" type="category" stroke="rgba(255,255,255,0.4)" fontSize={11} width={60} tickFormatter={getLangName} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Bar dataKey="visitors" fill="#10b981" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="no-data">No language data</div>}
+              </div>
+
+              <div className="card">
+                <h3 className="card-title">Screen Sizes</h3>
+                {data.screenSizes?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={data.screenSizes}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="size_group" stroke="rgba(255,255,255,0.4)" fontSize={9} angle={-20} textAnchor="end" height={60} />
+                      <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Bar dataKey="visitors" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="no-data">No screen data</div>}
               </div>
             </div>
 
             {/* Pages & Referrers */}
-            <div style={styles.twoColumn}>
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>📄 Top Pages</h3>
-                <table style={styles.table}>
-                  <thead><tr><th style={styles.th}>Page</th><th style={{ ...styles.th, textAlign: 'right' }}>Views</th></tr></thead>
-                  <tbody>
-                    {data.topPages.length > 0 ? data.topPages.map((p, i) => (
-                      <tr key={i}><td style={styles.td}>{p.page_path}</td><td style={{ ...styles.td, textAlign: 'right' }}>{p.views}</td></tr>
-                    )) : <tr><td colSpan={2} style={{ ...styles.td, textAlign: 'center' }}>No data</td></tr>}
-                  </tbody>
-                </table>
+            <div className="two-column">
+              <div className="card">
+                <h3 className="card-title">Top Pages</h3>
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Page</th>
+                        <th style={{ textAlign: 'right' }}>Views</th>
+                        <th style={{ textAlign: 'right' }}>Visitors</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.topPages.length > 0 ? data.topPages.map((p, i) => (
+                        <tr key={i}>
+                          <td className="truncate">{p.page_path}</td>
+                          <td style={{ textAlign: 'right' }}>{p.views}</td>
+                          <td style={{ textAlign: 'right' }}>{p.visitors}</td>
+                        </tr>
+                      )) : <tr><td colSpan={3} className="no-data-cell">No data</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🔗 Traffic Sources</h3>
-                <table style={styles.table}>
-                  <thead><tr><th style={styles.th}>Source</th><th style={{ ...styles.th, textAlign: 'right' }}>Visits</th></tr></thead>
-                  <tbody>
-                    {data.topReferrers.length > 0 ? data.topReferrers.map((r, i) => (
-                      <tr key={i}><td style={styles.td}>{r.source}</td><td style={{ ...styles.td, textAlign: 'right' }}>{r.visits}</td></tr>
-                    )) : <tr><td colSpan={2} style={{ ...styles.td, textAlign: 'center' }}>No data</td></tr>}
-                  </tbody>
-                </table>
+              <div className="card">
+                <h3 className="card-title">Traffic Sources</h3>
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Source</th>
+                        <th style={{ textAlign: 'right' }}>Visits</th>
+                        <th style={{ textAlign: 'right' }}>Visitors</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.topReferrers.length > 0 ? data.topReferrers.map((r, i) => (
+                        <tr key={i}>
+                          <td className="truncate">{r.source}</td>
+                          <td style={{ textAlign: 'right' }}>{r.visits}</td>
+                          <td style={{ textAlign: 'right' }}>{r.visitors}</td>
+                        </tr>
+                      )) : <tr><td colSpan={3} className="no-data-cell">No data</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
             {/* Recent Visitors */}
-            <div style={styles.card}>
-              <h3 style={styles.cardTitle}>👥 Recent Visitors</h3>
-              <div style={styles.tableScroll}>
-                <table style={styles.table}>
-                  <thead><tr><th style={styles.th}>Time</th><th style={styles.th}>Page</th><th style={styles.th}>Location</th><th style={styles.th}>Device</th></tr></thead>
+            <div className="card">
+              <h3 className="card-title">Recent Visitors</h3>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Page</th>
+                      <th>Location</th>
+                      <th>Device</th>
+                      <th>Browser</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {data.recentVisitors.length > 0 ? data.recentVisitors.slice(0, 20).map((v, i) => (
+                    {data.recentVisitors.length > 0 ? data.recentVisitors.slice(0, 25).map((v, i) => (
                       <tr key={i}>
-                        <td style={styles.td}>{format(new Date(v.created_at), 'MMM d, HH:mm')}</td>
-                        <td style={styles.td}>{v.page_path}</td>
-                        <td style={styles.td}>{getFlag(v.country)} {v.city !== 'unknown' ? `${v.city}, ${v.country}` : v.country}</td>
-                        <td style={styles.td}><span style={{ ...styles.badge, background: v.device === 'Mobile' ? 'rgba(139,92,246,0.2)' : 'rgba(6,182,212,0.2)', color: v.device === 'Mobile' ? '#8b5cf6' : '#06b6d4' }}>{v.device}</span></td>
+                        <td className="nowrap">{format(new Date(v.created_at), 'MMM d, HH:mm')}</td>
+                        <td className="truncate">{v.page_path}</td>
+                        <td className="nowrap">{getFlag(v.country)} {v.city !== 'unknown' ? v.city : v.country}</td>
+                        <td><span className={`badge ${v.device === 'Mobile' ? 'badge-purple' : 'badge-cyan'}`}>{v.device}</span></td>
+                        <td>{v.browser || '-'}</td>
+                        <td><span className={`badge ${v.is_returning ? 'badge-green' : 'badge-orange'}`}>{v.is_returning ? 'Returning' : 'New'}</span></td>
                       </tr>
-                    )) : <tr><td colSpan={4} style={{ ...styles.td, textAlign: 'center' }}>No visitors yet</td></tr>}
+                    )) : <tr><td colSpan={6} className="no-data-cell">No visitors yet</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -368,84 +587,115 @@ export default function Analytics() {
         {activeSection === 'database' && data && (
           <>
             {/* User Stats */}
-            <div style={styles.statsGrid}>
-              <StatCard title="Total Users" value={data.users.totalUsers} subValue={`+${data.users.newUsersWeek} this week`} icon="👥" gradient="purple" />
-              <StatCard title="Paid Subscribers" value={data.users.paidUsers} subValue={`${data.users.trialUsers} on trial`} icon="💎" gradient="green" />
-              <StatCard title="Total Revenue" value={data.revenue.totalRevenue} subValue="USD" icon="💰" gradient="cyan" isCurrency />
-              <StatCard title="Analyses Run" value={data.analysis.totalAnalyses} subValue={`${data.analysis.validSetups} valid`} icon="📊" gradient="orange" />
+            <div className="stats-grid">
+              <StatCard
+                title="Total Users"
+                value={data.users.totalUsers}
+                subValue={`+${data.users.newUsersWeek} this week`}
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>}
+                color="purple"
+              />
+              <StatCard
+                title="Paid Subscribers"
+                value={data.users.paidUsers}
+                subValue={`${data.users.trialUsers} on trial`}
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>}
+                color="green"
+              />
+              <StatCard
+                title="Total Revenue"
+                value={data.revenue.totalRevenue}
+                subValue="USD"
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>}
+                color="cyan"
+                isCurrency
+              />
+              <StatCard
+                title="Analyses Run"
+                value={data.analysis.totalAnalyses}
+                subValue={`${data.analysis.validSetups} valid`}
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18" /><path d="M18 9l-5-6-4 8-3-4" /></svg>}
+                color="orange"
+              />
             </div>
 
             {/* Revenue & Subscriptions */}
-            <div style={styles.twoColumn}>
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>📊 Subscription Plans</h3>
+            <div className="two-column">
+              <div className="card">
+                <h3 className="card-title">Subscription Plans</h3>
                 {data.subscriptionStats.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={data.subscriptionStats}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="subscription_plan" stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                      <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                      <Tooltip contentStyle={styles.tooltip} />
-                      <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Subscribers" />
+                      <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Subscribers" />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No subscription data yet</div>}
+                ) : <div className="no-data">No subscription data yet</div>}
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>💰 Revenue by Plan</h3>
+              <div className="card">
+                <h3 className="card-title">Revenue by Plan</h3>
                 {data.subscriptionStats.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={data.subscriptionStats}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="subscription_plan" stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                      <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} tickFormatter={(v) => `$${v}`} />
-                      <Tooltip contentStyle={styles.tooltip} formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Revenue']} />
-                      <Bar dataKey="total_revenue" fill="#10b981" radius={[4, 4, 0, 0]} name="Revenue" />
+                      <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} tickFormatter={(v) => `$${v}`} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Revenue']} />
+                      <Bar dataKey="total_revenue" fill="#10b981" radius={[6, 6, 0, 0]} name="Revenue" />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No revenue data yet</div>}
+                ) : <div className="no-data">No revenue data yet</div>}
               </div>
             </div>
 
             {/* Trading Stats */}
-            <div style={styles.statsGrid}>
-              <StatCard title="Buy Signals" value={data.analysis.buySignals} icon="📈" gradient="green" />
-              <StatCard title="Sell Signals" value={data.analysis.sellSignals} icon="📉" gradient="red" />
-              <StatCard title="Valid Setups" value={data.analysis.validSetups} icon="✅" gradient="cyan" />
-              <StatCard title="Avg Confidence" value={data.analysis.avgConfidence} subValue="%" icon="🎯" gradient="purple" isPercent />
+            <div className="stats-grid">
+              <StatCard title="Buy Signals" value={data.analysis.buySignals} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>} color="green" />
+              <StatCard title="Sell Signals" value={data.analysis.sellSignals} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7" /><polyline points="16 17 22 17 22 11" /></svg>} color="red" />
+              <StatCard title="Valid Setups" value={data.analysis.validSetups} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>} color="cyan" />
+              <StatCard title="Avg Confidence" value={data.analysis.avgConfidence} subValue="%" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>} color="purple" isPercent />
             </div>
 
             {/* Trading Pairs & Recent Users */}
-            <div style={styles.twoColumn}>
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>📈 Popular Trading Pairs</h3>
+            <div className="two-column">
+              <div className="card">
+                <h3 className="card-title">Popular Trading Pairs</h3>
                 {data.popularPairs.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={data.popularPairs.slice(0, 8)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                      <XAxis type="number" stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                      <YAxis dataKey="pair" type="category" stroke="rgba(255,255,255,0.4)" fontSize={12} width={80} />
-                      <Tooltip contentStyle={styles.tooltip} />
-                      <Bar dataKey="analyses" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis type="number" stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                      <YAxis dataKey="pair" type="category" stroke="rgba(255,255,255,0.4)" fontSize={11} width={80} />
+                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                      <Bar dataKey="analyses" fill="#8b5cf6" radius={[0, 6, 6, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <div style={styles.noData}>No trading data yet</div>}
+                ) : <div className="no-data">No trading data yet</div>}
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🆕 Recent Registrations</h3>
-                <div style={styles.tableScroll}>
-                  <table style={styles.table}>
-                    <thead><tr><th style={styles.th}>User</th><th style={styles.th}>Plan</th><th style={styles.th}>Date</th></tr></thead>
+              <div className="card">
+                <h3 className="card-title">Recent Registrations</h3>
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Plan</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {data.recentUsers.length > 0 ? data.recentUsers.map((u, i) => (
                         <tr key={i}>
-                          <td style={styles.td}>{u.name}</td>
-                          <td style={styles.td}><span style={{ ...styles.badge, background: u.payment_status === 'active' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)', color: u.payment_status === 'active' ? '#10b981' : '#f59e0b' }}>{u.subscription_plan || 'Free'}</span></td>
-                          <td style={styles.td}>{format(new Date(u.created_at), 'MMM d')}</td>
+                          <td>{u.name}</td>
+                          <td><span className={`badge ${u.payment_status === 'active' ? 'badge-green' : 'badge-orange'}`}>{u.subscription_plan || 'Free'}</span></td>
+                          <td>{format(new Date(u.created_at), 'MMM d')}</td>
                         </tr>
-                      )) : <tr><td colSpan={3} style={{ ...styles.td, textAlign: 'center' }}>No users yet</td></tr>}
+                      )) : <tr><td colSpan={3} className="no-data-cell">No users yet</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -453,23 +703,29 @@ export default function Analytics() {
             </div>
 
             {/* Signal Distribution */}
-            <div style={styles.card}>
-              <h3 style={styles.cardTitle}>📊 Signal Distribution</h3>
-              <div style={styles.signalGrid}>
-                <div style={styles.signalCard}>
-                  <div style={{ ...styles.signalIcon, background: 'rgba(16,185,129,0.2)', color: '#10b981' }}>📈</div>
-                  <div style={styles.signalValue}>{data.analysis.buySignals}</div>
-                  <div style={styles.signalLabel}>Buy Signals</div>
+            <div className="card">
+              <h3 className="card-title">Signal Distribution</h3>
+              <div className="signal-grid">
+                <div className="signal-card signal-buy">
+                  <div className="signal-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /></svg>
+                  </div>
+                  <div className="signal-value">{data.analysis.buySignals}</div>
+                  <div className="signal-label">Buy Signals</div>
                 </div>
-                <div style={styles.signalCard}>
-                  <div style={{ ...styles.signalIcon, background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}>📉</div>
-                  <div style={styles.signalValue}>{data.analysis.sellSignals}</div>
-                  <div style={styles.signalLabel}>Sell Signals</div>
+                <div className="signal-card signal-sell">
+                  <div className="signal-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7" /></svg>
+                  </div>
+                  <div className="signal-value">{data.analysis.sellSignals}</div>
+                  <div className="signal-label">Sell Signals</div>
                 </div>
-                <div style={styles.signalCard}>
-                  <div style={{ ...styles.signalIcon, background: 'rgba(99,102,241,0.2)', color: '#6366f1' }}>⏸️</div>
-                  <div style={styles.signalValue}>{data.analysis.totalAnalyses - data.analysis.buySignals - data.analysis.sellSignals}</div>
-                  <div style={styles.signalLabel}>Hold Signals</div>
+                <div className="signal-card signal-hold">
+                  <div className="signal-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                  </div>
+                  <div className="signal-value">{data.analysis.totalAnalyses - data.analysis.buySignals - data.analysis.sellSignals}</div>
+                  <div className="signal-label">Hold Signals</div>
                 </div>
               </div>
             </div>
@@ -480,104 +736,568 @@ export default function Analytics() {
   );
 }
 
-function StatCard({ title, value, subValue, icon, gradient, isCurrency, isPercent }: {
+function StatCard({ title, value, subValue, icon, color, isCurrency, isPercent, isText }: {
   title: string;
-  value: number;
+  value: number | string;
   subValue?: string;
-  icon: string;
-  gradient: 'purple' | 'cyan' | 'green' | 'orange' | 'red';
+  icon: React.ReactNode;
+  color: 'purple' | 'cyan' | 'green' | 'orange' | 'red';
   isCurrency?: boolean;
   isPercent?: boolean;
+  isText?: boolean;
 }) {
-  const gradients = {
-    purple: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(99,102,241,0.1))',
-    cyan: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(8,145,178,0.1))',
-    green: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.1))',
-    orange: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.1))',
-    red: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.1))',
-  };
-
-  const displayValue = isCurrency
-    ? `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const displayValue = isText
+    ? value
+    : isCurrency
+    ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : isPercent
-    ? `${value.toFixed(1)}%`
-    : value.toLocaleString();
+    ? `${Number(value).toFixed(0)}%`
+    : Number(value).toLocaleString();
 
   return (
-    <div style={{ ...styles.statCard, background: gradients[gradient] }}>
-      <div style={styles.statIcon}>{icon}</div>
-      <div>
-        <p style={styles.statTitle}>{title}</p>
-        <p style={styles.statValue}>{displayValue}</p>
-        {subValue && <p style={styles.statSubValue}>{subValue}</p>}
+    <div className={`stat-card stat-${color}`}>
+      <div className="stat-icon">{icon}</div>
+      <div className="stat-content">
+        <p className="stat-title">{title}</p>
+        <p className="stat-value">{displayValue}</p>
+        {subValue && <p className="stat-subvalue">{subValue}</p>}
       </div>
     </div>
   );
 }
 
-const styles: { [key: string]: React.CSSProperties } = {
-  container: { minHeight: '100vh', background: 'linear-gradient(180deg, #0a0a0f 0%, #111118 100%)', color: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100 },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
-  headerTitle: { margin: 0, fontSize: '20px', fontWeight: '600' },
-  headerBadge: { padding: '4px 10px', borderRadius: '20px', background: 'rgba(16,185,129,0.2)', color: '#10b981', fontSize: '12px', fontWeight: '500' },
-  headerRight: { display: 'flex', gap: '10px', alignItems: 'center' },
-  timeSelect: { padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '13px', cursor: 'pointer' },
-  refreshButton: { padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
-  sectionTabs: { display: 'flex', padding: '12px 24px', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' },
-  sectionTab: { padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s' },
-  sectionTabActive: { background: 'rgba(139,92,246,0.2)', color: '#fff' },
-  errorBanner: { margin: '16px 24px', padding: '12px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '14px' },
-  main: { padding: '20px 24px', maxWidth: '1400px', margin: '0 auto' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' },
-  statCard: { display: 'flex', alignItems: 'center', gap: '16px', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' },
-  statIcon: { fontSize: '28px' },
-  statTitle: { margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
-  statValue: { margin: '4px 0 0 0', fontSize: '24px', fontWeight: '700' },
-  statSubValue: { margin: '2px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.4)' },
-  card: { padding: '20px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: '16px' },
-  cardTitle: { margin: '0 0 16px 0', fontSize: '15px', fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
-  tooltip: { background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' },
-  twoColumn: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '16px', marginBottom: '16px' },
-  threeColumn: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', fontWeight: '500', fontSize: '12px', textTransform: 'uppercase' },
-  td: { padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '13px' },
-  tableScroll: { overflowX: 'auto' },
-  badge: { padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '500' },
-  noData: { height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px' },
-  countriesGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  countryRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' },
-  countryInfo: { display: 'flex', alignItems: 'center', gap: '10px', minWidth: '100px' },
-  countryFlag: { fontSize: '20px' },
-  countryName: { fontSize: '13px', fontWeight: '500' },
-  countryStats: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1, marginLeft: '20px' },
-  countryBar: { flex: 1, height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' },
-  countryBarFill: { height: '100%', background: 'linear-gradient(90deg, #8b5cf6, #06b6d4)', borderRadius: '3px', transition: 'width 0.3s' },
-  countryPercent: { fontSize: '13px', fontWeight: '600', minWidth: '40px', textAlign: 'right' },
-  countryVisitors: { fontSize: '12px', color: 'rgba(255,255,255,0.4)', minWidth: '30px', textAlign: 'right' },
-  signalGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' },
-  signalCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' },
-  signalIcon: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '12px' },
-  signalValue: { fontSize: '28px', fontWeight: '700' },
-  signalLabel: { fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' },
-  loginContainer: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #0a0a0f 0%, #111118 100%)', padding: '20px' },
-  loginCard: { width: '100%', maxWidth: '360px', padding: '40px 32px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' },
-  loginLogo: { fontSize: '48px', marginBottom: '16px' },
-  loginTitle: { margin: '0 0 8px 0', color: '#fff', fontSize: '24px', fontWeight: '600' },
-  loginSubtitle: { margin: '0 0 24px 0', color: 'rgba(255,255,255,0.4)', fontSize: '14px' },
-  loginForm: { display: 'flex', flexDirection: 'column', gap: '12px' },
-  loginInput: { padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '15px', outline: 'none' },
-  loginButton: { padding: '12px 20px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: 'pointer' },
-  loginError: { color: '#ef4444', fontSize: '13px', margin: 0 },
-  loadingContainer: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #0a0a0f 0%, #111118 100%)', gap: '16px' },
-  loadingSpinner: { width: '40px', height: '40px', border: '3px solid rgba(139,92,246,0.2)', borderTopColor: '#8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' },
-  loadingText: { color: 'rgba(255,255,255,0.5)', fontSize: '14px' },
-};
+const loginStyles = `
+  .login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0a0a12 0%, #12121f 50%, #0d0d18 100%);
+    padding: 20px;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 48px 36px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    text-align: center;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  }
+  .login-logo {
+    margin-bottom: 24px;
+  }
+  .logo-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+  .logo-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+  .login-title {
+    margin: 0 0 8px;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .login-subtitle {
+    margin: 0 0 32px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 15px;
+  }
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .login-input {
+    padding: 16px 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+    transition: all 0.2s;
+  }
+  .login-input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+  }
+  .login-button {
+    padding: 16px 24px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .login-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  }
+  .login-error {
+    color: #ef4444;
+    font-size: 14px;
+    margin: 0;
+  }
+`;
 
-// Add keyframes
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
-  document.head.appendChild(style);
-}
+const loadingStyles = `
+  .loading-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0a0a12 0%, #12121f 50%, #0d0d18 100%);
+    gap: 20px;
+  }
+  .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(139, 92, 246, 0.2);
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  .loading-text {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 15px;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+
+const dashboardStyles = `
+  .analytics-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0a0a12 0%, #12121f 50%, #0d0d18 100%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.5px;
+  }
+  .header-icon {
+    color: #8b5cf6;
+  }
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .header-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .time-select {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+  }
+  .refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+  }
+  .refresh-btn:disabled {
+    opacity: 0.7;
+  }
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .section-tabs {
+    display: flex;
+    padding: 12px 24px;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.1);
+  }
+  .section-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .section-tab:hover {
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .section-tab.active {
+    background: rgba(139, 92, 246, 0.15);
+    color: #fff;
+  }
+
+  .error-banner {
+    margin: 16px 24px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    font-size: 14px;
+  }
+
+  .main {
+    padding: 24px;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.2s;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  .stat-purple { background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(99, 102, 241, 0.06) 100%); }
+  .stat-cyan { background: linear-gradient(135deg, rgba(6, 182, 212, 0.12) 0%, rgba(8, 145, 178, 0.06) 100%); }
+  .stat-green { background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.06) 100%); }
+  .stat-orange { background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.06) 100%); }
+  .stat-red { background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(220, 38, 38, 0.06) 100%); }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .stat-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .stat-purple .stat-icon { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+  .stat-cyan .stat-icon { background: rgba(6, 182, 212, 0.2); color: #06b6d4; }
+  .stat-green .stat-icon { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+  .stat-orange .stat-icon { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+  .stat-red .stat-icon { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+  .stat-content { min-width: 0; }
+  .stat-title {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+  }
+  .stat-value {
+    margin: 4px 0 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  .stat-subvalue {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .card {
+    padding: 24px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 20px;
+  }
+  .card-title {
+    margin: 0 0 20px;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .two-column {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .three-column {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .countries-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .country-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+  }
+  .country-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 120px;
+  }
+  .country-flag {
+    font-size: 20px;
+  }
+  .country-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .country-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    margin-left: 16px;
+  }
+  .country-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .country-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #8b5cf6, #06b6d4);
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+  .country-value {
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 14px;
+  }
+  .table-scroll {
+    overflow-x: auto;
+  }
+  .truncate {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  .no-data-cell {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 32px !important;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .badge-purple { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+  .badge-cyan { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
+  .badge-green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+  .badge-orange { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+  .no-data {
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 14px;
+  }
+
+  .signal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .signal-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .signal-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .signal-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+  .signal-buy .signal-icon { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+  .signal-sell .signal-icon { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  .signal-hold .signal-icon { background: rgba(99, 102, 241, 0.15); color: #6366f1; }
+  .signal-value {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  .signal-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 4px;
+  }
+
+  @media (max-width: 768px) {
+    .header {
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    .header-right {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .main {
+      padding: 16px;
+    }
+    .stats-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .stat-card {
+      padding: 16px;
+    }
+    .stat-value {
+      font-size: 22px;
+    }
+    .two-column, .three-column {
+      grid-template-columns: 1fr;
+    }
+    .signal-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+`;

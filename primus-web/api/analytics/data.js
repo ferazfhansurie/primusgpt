@@ -39,16 +39,21 @@ export default async function handler(request) {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - days);
 
-    // Get overview stats
+    // Get overview stats with session data
     const [overview] = await sql`
       SELECT
         COUNT(*) as total_pageviews,
         COUNT(DISTINCT visitor_id) as total_visitors,
+        COUNT(DISTINCT session_id) as total_sessions,
         COUNT(DISTINCT CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN visitor_id END) as visitors_today,
         COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as pageviews_today,
         COUNT(DISTINCT CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN visitor_id END) as visitors_week,
-        COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as pageviews_week
+        COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as pageviews_week,
+        COALESCE(AVG(NULLIF(session_duration, 0)), 0) as avg_session_duration,
+        COUNT(DISTINCT CASE WHEN is_returning = true THEN visitor_id END) as returning_visitors,
+        COUNT(DISTINCT CASE WHEN is_returning = false OR is_returning IS NULL THEN visitor_id END) as new_visitors
       FROM analytics_events
+      WHERE event_type = 'pageview'
     `;
 
     // Get pageviews by day
@@ -56,11 +61,24 @@ export default async function handler(request) {
       SELECT
         DATE(created_at) as date,
         COUNT(*) as pageviews,
-        COUNT(DISTINCT visitor_id) as visitors
+        COUNT(DISTINCT visitor_id) as visitors,
+        COUNT(DISTINCT session_id) as sessions
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY DATE(created_at)
       ORDER BY date DESC
+    `;
+
+    // Get hourly traffic for today
+    const hourlyTraffic = await sql`
+      SELECT
+        EXTRACT(HOUR FROM created_at) as hour,
+        COUNT(*) as pageviews,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > NOW() - INTERVAL '24 hours' AND event_type = 'pageview'
+      GROUP BY hour
+      ORDER BY hour
     `;
 
     // Get top pages
@@ -68,9 +86,10 @@ export default async function handler(request) {
       SELECT
         page_path,
         COUNT(*) as views,
-        COUNT(DISTINCT visitor_id) as visitors
+        COUNT(DISTINCT visitor_id) as visitors,
+        COALESCE(AVG(NULLIF(session_duration, 0)), 0) as avg_time
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY page_path
       ORDER BY views DESC
       LIMIT 10
@@ -86,77 +105,159 @@ export default async function handler(request) {
         COUNT(*) as visits,
         COUNT(DISTINCT visitor_id) as visitors
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY source
       ORDER BY visits DESC
       LIMIT 10
     `;
 
-    // Get countries with flag emojis
+    // Get countries
     const countries = await sql`
       SELECT
         country,
         COUNT(*) as visits,
         COUNT(DISTINCT visitor_id) as visitors
       FROM analytics_events
-      WHERE created_at > ${daysAgo} AND country IS NOT NULL AND country != 'unknown' AND country != ''
+      WHERE created_at > ${daysAgo} AND country IS NOT NULL AND country != 'unknown' AND country != '' AND event_type = 'pageview'
       GROUP BY country
       ORDER BY visitors DESC
       LIMIT 15
     `;
 
-    // Get devices
-    const devices = await sql`
+    // Get cities (top 10)
+    const cities = await sql`
       SELECT
-        CASE
-          WHEN user_agent ILIKE '%mobile%' OR user_agent ILIKE '%android%' OR user_agent ILIKE '%iphone%' THEN 'Mobile'
-          WHEN user_agent ILIKE '%tablet%' OR user_agent ILIKE '%ipad%' THEN 'Tablet'
-          ELSE 'Desktop'
-        END as device,
+        city,
+        country,
         COUNT(*) as visits,
         COUNT(DISTINCT visitor_id) as visitors
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND city IS NOT NULL AND city != 'unknown' AND city != '' AND event_type = 'pageview'
+      GROUP BY city, country
+      ORDER BY visitors DESC
+      LIMIT 10
+    `;
+
+    // Get devices - prefer client-side detection, fallback to server-side
+    const devices = await sql`
+      SELECT
+        COALESCE(
+          NULLIF(device_type, ''),
+          CASE
+            WHEN user_agent ILIKE '%mobile%' OR user_agent ILIKE '%android%' OR user_agent ILIKE '%iphone%' THEN 'Mobile'
+            WHEN user_agent ILIKE '%tablet%' OR user_agent ILIKE '%ipad%' THEN 'Tablet'
+            ELSE 'Desktop'
+          END
+        ) as device,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY device
       ORDER BY visits DESC
     `;
 
-    // Get browsers
+    // Get browsers - prefer client-side detection
     const browsers = await sql`
       SELECT
-        CASE
-          WHEN user_agent ILIKE '%chrome%' AND user_agent NOT ILIKE '%edg%' THEN 'Chrome'
-          WHEN user_agent ILIKE '%firefox%' THEN 'Firefox'
-          WHEN user_agent ILIKE '%safari%' AND user_agent NOT ILIKE '%chrome%' THEN 'Safari'
-          WHEN user_agent ILIKE '%edg%' THEN 'Edge'
-          WHEN user_agent ILIKE '%opera%' OR user_agent ILIKE '%opr%' THEN 'Opera'
-          ELSE 'Other'
-        END as browser,
+        COALESCE(
+          NULLIF(browser, ''),
+          CASE
+            WHEN user_agent ILIKE '%chrome%' AND user_agent NOT ILIKE '%edg%' THEN 'Chrome'
+            WHEN user_agent ILIKE '%firefox%' THEN 'Firefox'
+            WHEN user_agent ILIKE '%safari%' AND user_agent NOT ILIKE '%chrome%' THEN 'Safari'
+            WHEN user_agent ILIKE '%edg%' THEN 'Edge'
+            WHEN user_agent ILIKE '%opera%' OR user_agent ILIKE '%opr%' THEN 'Opera'
+            ELSE 'Other'
+          END
+        ) as browser,
         COUNT(*) as visits,
         COUNT(DISTINCT visitor_id) as visitors
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY browser
       ORDER BY visits DESC
     `;
 
-    // Get OS
+    // Get OS - prefer client-side detection
     const operatingSystems = await sql`
       SELECT
-        CASE
-          WHEN user_agent ILIKE '%windows%' THEN 'Windows'
-          WHEN user_agent ILIKE '%mac%' THEN 'macOS'
-          WHEN user_agent ILIKE '%linux%' AND user_agent NOT ILIKE '%android%' THEN 'Linux'
-          WHEN user_agent ILIKE '%android%' THEN 'Android'
-          WHEN user_agent ILIKE '%iphone%' OR user_agent ILIKE '%ipad%' THEN 'iOS'
-          ELSE 'Other'
-        END as os,
+        COALESCE(
+          NULLIF(os, ''),
+          CASE
+            WHEN user_agent ILIKE '%windows%' THEN 'Windows'
+            WHEN user_agent ILIKE '%mac%' THEN 'macOS'
+            WHEN user_agent ILIKE '%linux%' AND user_agent NOT ILIKE '%android%' THEN 'Linux'
+            WHEN user_agent ILIKE '%android%' THEN 'Android'
+            WHEN user_agent ILIKE '%iphone%' OR user_agent ILIKE '%ipad%' THEN 'iOS'
+            ELSE 'Other'
+          END
+        ) as os,
         COUNT(*) as visits,
         COUNT(DISTINCT visitor_id) as visitors
       FROM analytics_events
-      WHERE created_at > ${daysAgo}
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
       GROUP BY os
       ORDER BY visits DESC
+    `;
+
+    // Get languages
+    const languages = await sql`
+      SELECT
+        SPLIT_PART(language, '-', 1) as lang,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > ${daysAgo} AND language IS NOT NULL AND language != 'unknown' AND event_type = 'pageview'
+      GROUP BY lang
+      ORDER BY visitors DESC
+      LIMIT 10
+    `;
+
+    // Get screen sizes grouped
+    const screenSizes = await sql`
+      SELECT
+        CASE
+          WHEN screen_width >= 1920 THEN '1920+ (Large Desktop)'
+          WHEN screen_width >= 1440 THEN '1440-1919 (Desktop)'
+          WHEN screen_width >= 1024 THEN '1024-1439 (Laptop)'
+          WHEN screen_width >= 768 THEN '768-1023 (Tablet)'
+          WHEN screen_width >= 375 THEN '375-767 (Mobile)'
+          ELSE '< 375 (Small Mobile)'
+        END as size_group,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > ${daysAgo} AND screen_width IS NOT NULL AND event_type = 'pageview'
+      GROUP BY size_group
+      ORDER BY visitors DESC
+    `;
+
+    // Get connection types
+    const connectionTypes = await sql`
+      SELECT
+        COALESCE(NULLIF(connection_type, ''), 'unknown') as connection,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+      GROUP BY connection
+      ORDER BY visitors DESC
+    `;
+
+    // Get UTM campaigns if any
+    const utmCampaigns = await sql`
+      SELECT
+        utm_source,
+        utm_medium,
+        utm_campaign,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as visitors
+      FROM analytics_events
+      WHERE created_at > ${daysAgo} AND utm_source IS NOT NULL AND event_type = 'pageview'
+      GROUP BY utm_source, utm_medium, utm_campaign
+      ORDER BY visitors DESC
+      LIMIT 10
     `;
 
     // Get recent visitors (last 50)
@@ -167,14 +268,28 @@ export default async function handler(request) {
         referrer,
         country,
         city,
-        CASE
-          WHEN user_agent ILIKE '%mobile%' OR user_agent ILIKE '%android%' OR user_agent ILIKE '%iphone%' THEN 'Mobile'
-          ELSE 'Desktop'
-        END as device,
+        COALESCE(device_type,
+          CASE
+            WHEN user_agent ILIKE '%mobile%' OR user_agent ILIKE '%android%' OR user_agent ILIKE '%iphone%' THEN 'Mobile'
+            ELSE 'Desktop'
+          END
+        ) as device,
+        browser,
+        os,
+        session_duration,
+        is_returning,
         created_at
       FROM analytics_events
+      WHERE event_type = 'pageview'
       ORDER BY created_at DESC
       LIMIT 50
+    `;
+
+    // Get live visitors (last 5 minutes)
+    const [liveVisitors] = await sql`
+      SELECT COUNT(DISTINCT visitor_id) as count
+      FROM analytics_events
+      WHERE created_at > NOW() - INTERVAL '5 minutes' AND event_type = 'pageview'
     `;
 
     // Get user stats from users table
@@ -254,10 +369,15 @@ export default async function handler(request) {
         overview: {
           totalPageviews: parseInt(overview?.total_pageviews) || 0,
           totalVisitors: parseInt(overview?.total_visitors) || 0,
+          totalSessions: parseInt(overview?.total_sessions) || 0,
           visitorsToday: parseInt(overview?.visitors_today) || 0,
           pageviewsToday: parseInt(overview?.pageviews_today) || 0,
           visitorsWeek: parseInt(overview?.visitors_week) || 0,
           pageviewsWeek: parseInt(overview?.pageviews_week) || 0,
+          avgSessionDuration: parseFloat(overview?.avg_session_duration) || 0,
+          returningVisitors: parseInt(overview?.returning_visitors) || 0,
+          newVisitors: parseInt(overview?.new_visitors) || 0,
+          liveVisitors: parseInt(liveVisitors?.count) || 0,
         },
         users: {
           totalUsers: parseInt(userStats?.total_users) || 0,
@@ -280,12 +400,18 @@ export default async function handler(request) {
           avgConfidence: parseFloat(analysisStats?.avg_confidence) || 0,
         },
         pageviewsByDay,
+        hourlyTraffic,
         topPages,
         topReferrers,
         countries,
+        cities,
         devices,
         browsers,
         operatingSystems,
+        languages,
+        screenSizes,
+        connectionTypes,
+        utmCampaigns,
         recentVisitors,
         recentUsers,
         subscriptionStats,
