@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 
-const ANALYTICS_PASSWORD = '!Demo123123';
+const ANALYTICS_PASSWORD = 'P@ssw0rd';
 const API_URL = import.meta.env.PROD
   ? '/api/analytics/data'
   : 'https://primusgpt-ai.vercel.app/api/analytics/data';

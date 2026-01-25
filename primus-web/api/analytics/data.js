@@ -4,7 +4,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const ANALYTICS_PASSWORD = '!Demo123123';
+const ANALYTICS_PASSWORD = 'P@ssw0rd';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
