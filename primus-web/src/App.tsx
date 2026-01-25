@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import Layout from './components/Layout';
 import Hero from './components/Hero';
 import Stats from './components/Stats';
@@ -55,6 +56,7 @@ function App() {
         <Route path="/register" element={<Layout><Register /></Layout>} />
         <Route path="/register/success" element={<Layout><RegisterSuccess /></Layout>} />
       </Routes>
+      <Analytics />
     </>
   );
 }
