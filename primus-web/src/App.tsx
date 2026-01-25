@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
-import { Analytics } from '@vercel/analytics/react';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import { trackPageView } from './utils/analytics';
 import Layout from './components/Layout';
 import Hero from './components/Hero';
 import Stats from './components/Stats';
@@ -15,9 +15,16 @@ import CTA from './components/CTA';
 import LoadingScreen from './components/LoadingScreen';
 import Register from './components/RegisterWithPayment';
 import RegisterSuccess from './components/RegisterSuccess';
+import Analytics from './components/Analytics';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const location = useLocation();
+
+  useEffect(() => {
+    // Track page views
+    trackPageView(location.pathname);
+  }, [location]);
 
   useEffect(() => {
     // Prevent scrolling during loading
@@ -55,8 +62,8 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/register" element={<Layout><Register /></Layout>} />
         <Route path="/register/success" element={<Layout><RegisterSuccess /></Layout>} />
+        <Route path="/analytics" element={<Analytics />} />
       </Routes>
-      <Analytics />
     </>
   );
 }
