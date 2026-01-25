@@ -63,8 +63,11 @@ export default async function handler(request) {
                request.headers.get('x-real-ip') ||
                'unknown';
     const country = request.headers.get('x-vercel-ip-country') || 'unknown';
-    const city = request.headers.get('x-vercel-ip-city') || 'unknown';
-    const region = request.headers.get('x-vercel-ip-country-region') || 'unknown';
+    // Decode URL-encoded city names (e.g., Kuala%20Lumpur -> Kuala Lumpur)
+    const rawCity = request.headers.get('x-vercel-ip-city') || 'unknown';
+    const city = decodeURIComponent(rawCity);
+    const rawRegion = request.headers.get('x-vercel-ip-country-region') || 'unknown';
+    const region = decodeURIComponent(rawRegion);
 
     // Insert the event with new fields
     await sql`

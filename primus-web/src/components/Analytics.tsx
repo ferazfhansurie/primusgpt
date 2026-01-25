@@ -89,6 +89,10 @@ interface AnalyticsData {
   recentVisitors: Array<{
     visitor_id: string;
     page_path: string;
+    referrer: string;
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_campaign: string | null;
     country: string;
     city: string;
     device: string;
@@ -333,50 +337,162 @@ export default function Analytics() {
               />
             </div>
 
-            {/* Traffic Chart */}
+            {/* Recent Visitors - Most important for marketing */}
             <div className="card">
-              <h3 className="card-title">Traffic Overview</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={data.pageviewsByDay.slice().reverse()}>
-                  <defs>
-                    <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorPageviews" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" tickFormatter={(val) => format(new Date(val), 'MMM d')} fontSize={11} />
-                  <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
-                    labelFormatter={(val) => format(new Date(val), 'MMMM d, yyyy')}
-                  />
-                  <Legend />
-                  <Area type="monotone" dataKey="visitors" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorVisitors)" name="Visitors" />
-                  <Area type="monotone" dataKey="pageviews" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorPageviews)" name="Page Views" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <h3 className="card-title">
+                <span>Recent Visitors</span>
+                <span className="card-subtitle">{data.recentVisitors.length} unique visitors</span>
+              </h3>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Page</th>
+                      <th>Came From</th>
+                      <th>Location</th>
+                      <th>Device</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.recentVisitors.length > 0 ? data.recentVisitors.slice(0, 25).map((v, i) => {
+                      // Get source - prioritize UTM params over referrer
+                      const getSource = () => {
+                        // First check UTM source (most reliable for marketing)
+                        if (v.utm_source) {
+                          const src = v.utm_source.toLowerCase();
+                          const medium = (v.utm_medium || '').toLowerCase();
+                          const isInApp = medium === 'in-app';
+                          if (src.includes('google') && medium === 'cpc') return '💰 Google Ads';
+                          if (src.includes('google')) return '🔍 Google';
+                          if (src.includes('facebook') || src.includes('fb') || src === 'facebook') return isInApp ? '📱 Facebook App' : '📘 Facebook';
+                          if (src.includes('instagram') || src === 'ig' || src === 'instagram') return isInApp ? '📱 Instagram App' : '📷 Instagram';
+                          if (src.includes('twitter') || src === 'x' || src === 'twitter') return isInApp ? '📱 Twitter App' : '𝕏 Twitter/X';
+                          if (src.includes('tiktok') || src === 'tiktok') return isInApp ? '📱 TikTok App' : '🎵 TikTok';
+                          if (src.includes('youtube') || src === 'yt') return '▶️ YouTube';
+                          if (src.includes('linkedin') || src === 'linkedin') return isInApp ? '📱 LinkedIn App' : '💼 LinkedIn';
+                          if (src.includes('telegram') || src === 'tg' || src === 'telegram') return isInApp ? '📱 Telegram App' : '✈️ Telegram';
+                          if (src.includes('whatsapp') || src === 'wa' || src === 'whatsapp') return isInApp ? '📱 WhatsApp' : '💬 WhatsApp';
+                          if (src.includes('snapchat') || src === 'snapchat') return '👻 Snapchat';
+                          if (src.includes('pinterest') || src === 'pinterest') return '📌 Pinterest';
+                          if (src.includes('line') || src === 'line') return '💚 Line';
+                          if (src.includes('wechat') || src === 'wechat') return '💬 WeChat';
+                          if (src.includes('reddit')) return '🤖 Reddit';
+                          if (src.includes('email') || src.includes('newsletter')) return '📧 Email';
+                          if (medium === 'cpc' || medium === 'paid') return `💰 ${v.utm_source}`;
+                          if (isInApp) return `📱 ${v.utm_source}`;
+                          return `📢 ${v.utm_source}`;
+                        }
+                        // Fall back to referrer
+                        const ref = v.referrer;
+                        if (!ref || ref === 'direct' || ref === '') return '🔗 Direct';
+                        try {
+                          const url = new URL(ref);
+                          const host = url.hostname.replace('www.', '');
+                          if (host.includes('google')) return '🔍 Google';
+                          if (host.includes('facebook') || host.includes('fb.')) return '📘 Facebook';
+                          if (host.includes('instagram')) return '📷 Instagram';
+                          if (host.includes('twitter') || host.includes('x.com')) return '𝕏 Twitter/X';
+                          if (host.includes('tiktok')) return '🎵 TikTok';
+                          if (host.includes('youtube')) return '▶️ YouTube';
+                          if (host.includes('linkedin')) return '💼 LinkedIn';
+                          if (host.includes('telegram')) return '✈️ Telegram';
+                          if (host.includes('whatsapp')) return '💬 WhatsApp';
+                          if (host.includes('reddit')) return '🤖 Reddit';
+                          return `🌐 ${host}`;
+                        } catch {
+                          return '🔗 Direct';
+                        }
+                      };
+                      return (
+                        <tr key={i}>
+                          <td className="nowrap">{format(new Date(v.created_at), 'MMM d, HH:mm')}</td>
+                          <td className="truncate">{v.page_path}</td>
+                          <td className="nowrap">{getSource()}</td>
+                          <td className="nowrap">{getFlag(v.country)} {v.city !== 'unknown' ? decodeURIComponent(v.city) : v.country}</td>
+                          <td><span className={`badge ${v.device === 'Mobile' ? 'badge-purple' : 'badge-cyan'}`}>{v.device}</span></td>
+                          <td><span className={`badge ${v.is_returning ? 'badge-green' : 'badge-orange'}`}>{v.is_returning ? 'Returning' : 'New'}</span></td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan={6} className="no-data-cell">No visitors yet</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Hourly Traffic */}
+            {/* Traffic Chart - Show hourly when limited daily data */}
             <div className="card">
-              <h3 className="card-title">Hourly Traffic (Last 24h)</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={fullHourlyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="label" stroke="rgba(255,255,255,0.4)" fontSize={10} interval={2} />
-                  <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
-                  <Tooltip
-                    contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                  />
-                  <Bar dataKey="visitors" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Visitors" />
-                </BarChart>
-              </ResponsiveContainer>
+              <h3 className="card-title">Traffic Overview {data.pageviewsByDay.length <= 2 ? '(Hourly)' : ''}</h3>
+              {(timeRange === 1 || data.pageviewsByDay.length <= 2) ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={fullHourlyData}>
+                    <defs>
+                      <linearGradient id="colorHourlyVisitors" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                      </linearGradient>
+                      <linearGradient id="colorHourlyPageviews" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.4} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="label" stroke="rgba(255,255,255,0.4)" fontSize={10} interval={2} />
+                    <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+                    />
+                    <Legend />
+                    <Bar dataKey="visitors" fill="url(#colorHourlyVisitors)" radius={[4, 4, 0, 0]} name="Visitors" />
+                    <Bar dataKey="pageviews" fill="url(#colorHourlyPageviews)" radius={[4, 4, 0, 0]} name="Page Views" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={data.pageviewsByDay.slice().reverse()}>
+                    <defs>
+                      <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorPageviews" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" tickFormatter={(val) => format(new Date(val), 'MMM d')} fontSize={11} />
+                    <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+                      labelFormatter={(val) => format(new Date(val), 'MMMM d, yyyy')}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="visitors" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorVisitors)" name="Visitors" />
+                    <Area type="monotone" dataKey="pageviews" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorPageviews)" name="Page Views" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
+
+            {/* Hourly Traffic - Only show when viewing more than 1 day */}
+            {timeRange > 1 && (
+              <div className="card">
+                <h3 className="card-title">Hourly Traffic (Last 24h)</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={fullHourlyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="label" stroke="rgba(255,255,255,0.4)" fontSize={10} interval={2} />
+                    <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                    />
+                    <Bar dataKey="visitors" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Visitors" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             {/* Countries & Cities */}
             <div className="two-column">
@@ -407,7 +523,7 @@ export default function Analytics() {
                     <div key={i} className="country-row">
                       <div className="country-info">
                         <span className="country-flag">{getFlag(c.country)}</span>
-                        <span className="country-name">{c.city}</span>
+                        <span className="country-name">{decodeURIComponent(c.city)}</span>
                       </div>
                       <div className="country-stats">
                         <span className="country-value">{c.visitors}</span>
@@ -418,29 +534,14 @@ export default function Analytics() {
               </div>
             </div>
 
-            {/* Devices, Browsers, OS */}
-            <div className="three-column">
-              <div className="card">
-                <h3 className="card-title">Devices</h3>
-                {data.devices.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
-                      <Pie data={data.devices} dataKey="visitors" nameKey="device" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
-                        {data.devices.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : <div className="no-data">No data</div>}
-              </div>
-
+            {/* Browsers & OS */}
+            <div className="two-column">
               <div className="card">
                 <h3 className="card-title">Browsers</h3>
                 {data.browsers.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
+                  <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={data.browsers} dataKey="visitors" nameKey="browser" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
+                      <Pie data={data.browsers} dataKey="visitors" nameKey="browser" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
                         {data.browsers.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
                       <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
@@ -453,9 +554,9 @@ export default function Analytics() {
               <div className="card">
                 <h3 className="card-title">Operating Systems</h3>
                 {data.operatingSystems.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
+                  <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={data.operatingSystems} dataKey="visitors" nameKey="os" cx="50%" cy="50%" outerRadius={60} innerRadius={30}>
+                      <Pie data={data.operatingSystems} dataKey="visitors" nameKey="os" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
                         {data.operatingSystems.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Pie>
                       <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
@@ -547,37 +648,6 @@ export default function Analytics() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
-
-            {/* Recent Visitors */}
-            <div className="card">
-              <h3 className="card-title">Recent Visitors</h3>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Page</th>
-                      <th>Location</th>
-                      <th>Device</th>
-                      <th>Browser</th>
-                      <th>Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentVisitors.length > 0 ? data.recentVisitors.slice(0, 25).map((v, i) => (
-                      <tr key={i}>
-                        <td className="nowrap">{format(new Date(v.created_at), 'MMM d, HH:mm')}</td>
-                        <td className="truncate">{v.page_path}</td>
-                        <td className="nowrap">{getFlag(v.country)} {v.city !== 'unknown' ? v.city : v.country}</td>
-                        <td><span className={`badge ${v.device === 'Mobile' ? 'badge-purple' : 'badge-cyan'}`}>{v.device}</span></td>
-                        <td>{v.browser || '-'}</td>
-                        <td><span className={`badge ${v.is_returning ? 'badge-green' : 'badge-orange'}`}>{v.is_returning ? 'Returning' : 'New'}</span></td>
-                      </tr>
-                    )) : <tr><td colSpan={6} className="no-data-cell">No visitors yet</td></tr>}
-                  </tbody>
-                </table>
               </div>
             </div>
           </>
@@ -1106,6 +1176,14 @@ const dashboardStyles = `
     font-size: 16px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-subtitle {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
   }
 
   .two-column {

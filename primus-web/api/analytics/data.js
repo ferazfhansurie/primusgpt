@@ -257,12 +257,15 @@ export default async function handler(request) {
       LIMIT 10
     `;
 
-    // Get recent visitors (last 50)
+    // Get recent unique visitors (most recent visit per visitor, last 50 unique)
     const recentVisitors = await sql`
-      SELECT
+      SELECT DISTINCT ON (visitor_id)
         visitor_id,
         page_path,
         referrer,
+        utm_source,
+        utm_medium,
+        utm_campaign,
         country,
         city,
         COALESCE(device_type,
@@ -278,9 +281,12 @@ export default async function handler(request) {
         created_at
       FROM analytics_events
       WHERE event_type = 'pageview'
-      ORDER BY created_at DESC
-      LIMIT 50
+      ORDER BY visitor_id, created_at DESC
     `;
+    
+    // Sort by most recent first after deduplication
+    recentVisitors.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const recentVisitorsLimited = recentVisitors.slice(0, 50);
 
     // Get live visitors (last 5 minutes)
     const [liveVisitors] = await sql`
@@ -409,7 +415,7 @@ export default async function handler(request) {
         screenSizes,
         connectionTypes,
         utmCampaigns,
-        recentVisitors,
+        recentVisitors: recentVisitorsLimited,
         recentUsers,
         subscriptionStats,
         popularPairs,

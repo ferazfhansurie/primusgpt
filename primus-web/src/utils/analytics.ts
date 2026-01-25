@@ -82,12 +82,61 @@ function getUtmParams(): Record<string, string> {
   return utmParams;
 }
 
+// Detect in-app browsers from User Agent
+function detectInAppSource(): string | null {
+  const ua = navigator.userAgent;
+  
+  // Instagram in-app browser
+  if (ua.includes('Instagram')) return 'instagram';
+  
+  // Facebook in-app browser (FBAN = Facebook App Native, FBAV = Facebook App Version)
+  if (ua.includes('FBAN') || ua.includes('FBAV') || ua.includes('FB_IAB')) return 'facebook';
+  
+  // TikTok in-app browser
+  if (ua.includes('TikTok') || ua.includes('BytedanceWebview') || ua.includes('ByteLocale')) return 'tiktok';
+  
+  // Twitter/X in-app browser
+  if (ua.includes('Twitter')) return 'twitter';
+  
+  // LinkedIn in-app browser
+  if (ua.includes('LinkedInApp')) return 'linkedin';
+  
+  // Snapchat in-app browser
+  if (ua.includes('Snapchat')) return 'snapchat';
+  
+  // Pinterest in-app browser
+  if (ua.includes('Pinterest')) return 'pinterest';
+  
+  // Telegram in-app browser (less reliable)
+  if (ua.includes('Telegram')) return 'telegram';
+  
+  // WhatsApp doesn't always identify itself, but sometimes...
+  if (ua.includes('WhatsApp')) return 'whatsapp';
+  
+  // Line app
+  if (ua.includes('Line/')) return 'line';
+  
+  // WeChat
+  if (ua.includes('MicroMessenger')) return 'wechat';
+  
+  return null;
+}
+
 export async function trackPageView(path: string): Promise<void> {
   // Don't track analytics page itself
   if (path === '/analytics') return;
 
   try {
     const utmParams = getUtmParams();
+    
+    // Auto-detect source from in-app browser if no UTM source
+    if (!utmParams.utm_source) {
+      const inAppSource = detectInAppSource();
+      if (inAppSource) {
+        utmParams.utm_source = inAppSource;
+        utmParams.utm_medium = 'in-app';
+      }
+    }
 
     const payload = {
       event_type: 'pageview',
