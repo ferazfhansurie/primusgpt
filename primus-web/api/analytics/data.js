@@ -138,65 +138,62 @@ export default async function handler(request) {
       LIMIT 10
     `;
 
-    // Get devices - prefer client-side detection, fallback to server-side
+    // Get devices
     const devices = await sql`
-      SELECT
-        COALESCE(
-          NULLIF(device_type, ''),
+      SELECT device, COUNT(*) as visits, COUNT(DISTINCT visitor_id) as visitors
+      FROM (
+        SELECT visitor_id,
           CASE
+            WHEN device_type IS NOT NULL AND device_type != '' THEN device_type
             WHEN user_agent ILIKE '%mobile%' OR user_agent ILIKE '%android%' OR user_agent ILIKE '%iphone%' THEN 'Mobile'
             WHEN user_agent ILIKE '%tablet%' OR user_agent ILIKE '%ipad%' THEN 'Tablet'
             ELSE 'Desktop'
-          END
-        ) as device,
-        COUNT(*) as visits,
-        COUNT(DISTINCT visitor_id) as visitors
-      FROM analytics_events
-      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+          END as device
+        FROM analytics_events
+        WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+      ) sub
       GROUP BY device
       ORDER BY visits DESC
     `;
 
-    // Get browsers - prefer client-side detection
+    // Get browsers
     const browsers = await sql`
-      SELECT
-        COALESCE(
-          NULLIF(browser, ''),
+      SELECT browser, COUNT(*) as visits, COUNT(DISTINCT visitor_id) as visitors
+      FROM (
+        SELECT visitor_id,
           CASE
+            WHEN browser IS NOT NULL AND browser != '' THEN browser
             WHEN user_agent ILIKE '%chrome%' AND user_agent NOT ILIKE '%edg%' THEN 'Chrome'
             WHEN user_agent ILIKE '%firefox%' THEN 'Firefox'
             WHEN user_agent ILIKE '%safari%' AND user_agent NOT ILIKE '%chrome%' THEN 'Safari'
             WHEN user_agent ILIKE '%edg%' THEN 'Edge'
             WHEN user_agent ILIKE '%opera%' OR user_agent ILIKE '%opr%' THEN 'Opera'
             ELSE 'Other'
-          END
-        ) as browser,
-        COUNT(*) as visits,
-        COUNT(DISTINCT visitor_id) as visitors
-      FROM analytics_events
-      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+          END as browser
+        FROM analytics_events
+        WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+      ) sub
       GROUP BY browser
       ORDER BY visits DESC
     `;
 
-    // Get OS - prefer client-side detection
+    // Get OS
     const operatingSystems = await sql`
-      SELECT
-        COALESCE(
-          NULLIF(os, ''),
+      SELECT os, COUNT(*) as visits, COUNT(DISTINCT visitor_id) as visitors
+      FROM (
+        SELECT visitor_id,
           CASE
+            WHEN os IS NOT NULL AND os != '' THEN os
             WHEN user_agent ILIKE '%windows%' THEN 'Windows'
             WHEN user_agent ILIKE '%mac%' THEN 'macOS'
             WHEN user_agent ILIKE '%linux%' AND user_agent NOT ILIKE '%android%' THEN 'Linux'
             WHEN user_agent ILIKE '%android%' THEN 'Android'
             WHEN user_agent ILIKE '%iphone%' OR user_agent ILIKE '%ipad%' THEN 'iOS'
             ELSE 'Other'
-          END
-        ) as os,
-        COUNT(*) as visits,
-        COUNT(DISTINCT visitor_id) as visitors
-      FROM analytics_events
-      WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+          END as os
+        FROM analytics_events
+        WHERE created_at > ${daysAgo} AND event_type = 'pageview'
+      ) sub
       GROUP BY os
       ORDER BY visits DESC
     `;
