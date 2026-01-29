@@ -186,7 +186,29 @@ app.use('/api/web-auth', async (req, res, next) => {
   }
 });
 
-// 
+// Analysis routes with lazy loading and DB initialization
+app.use('/api/analysis', async (req, res, next) => {
+  try {
+    // Initialize database first
+    await initializeDatabase();
+    
+    // Load analysis API if not loaded
+    if (!analysisApi) {
+      const analysisModule = await import('../src/api/analysisApi.js');
+      analysisApi = analysisModule.default;
+    }
+    
+    return analysisApi(req, res, next);
+  } catch (error) {
+    console.error('Error in analysis route:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process analysis request', 
+      details: error.message 
+    });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
