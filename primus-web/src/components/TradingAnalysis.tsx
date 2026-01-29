@@ -61,7 +61,6 @@ const FOREX_PAIRS = [
 
 const TradingAnalysis: React.FC = () => {
   const [step, setStep] = useState<Step>('login');
-  const [user, setUser] = useState<User | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -114,7 +113,6 @@ const TradingAnalysis: React.FC = () => {
 
       if (data.success) {
         setToken(savedToken);
-        setUser(data.user);
         setSubscriptionStatus(data.subscriptionStatus);
         setStep('market');
       } else {
@@ -144,7 +142,6 @@ const TradingAnalysis: React.FC = () => {
 
       if (data.success) {
         setToken(data.token);
-        setUser(data.user);
         setSubscriptionStatus(data.subscriptionStatus);
         localStorage.setItem('primus_web_token', data.token);
         transitionTo('market');
@@ -176,7 +173,6 @@ const TradingAnalysis: React.FC = () => {
     }
 
     setToken(null);
-    setUser(null);
     setSubscriptionStatus(null);
     localStorage.removeItem('primus_web_token');
     resetFlow();
