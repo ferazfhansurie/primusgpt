@@ -17,6 +17,7 @@ let dbInitialized = false;
 let database = null;
 let authApi = null;
 let paymentApi = null;
+let webAuthApi = null;
 
 // CORS configuration - allow all origins for now
 app.use(cors({
@@ -65,6 +66,7 @@ app.get('/', (req, res) => {
     message: 'API is working!',
     endpoints: {
       auth: '/api/auth',
+      webAuth: '/api/web-auth',
       payment: '/api/payment',
       health: '/api/health'
     }
@@ -137,7 +139,30 @@ app.use('/api/payment', async (req, res, next) => {
     });
   }
 });
+Web Auth routes with lazy loading and DB initialization
+app.use('/api/web-auth', async (req, res, next) => {
+  try {
+    // Initialize database first
+    await initializeDatabase();
+    
+    // Load web auth API if not loaded
+    if (!webAuthApi) {
+      const webAuthModule = await import('../src/api/webAuthApi.js');
+      webAuthApi = webAuthModule.default;
+    }
+    
+    return webAuthApi(req, res, next);
+  } catch (error) {
+    console.error('Error in web-auth route:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process web-auth request', 
+      details: error.message 
+    });
+  }
+});
 
+// 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
