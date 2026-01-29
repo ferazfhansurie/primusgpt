@@ -1,4 +1,5 @@
 import React, { type ReactNode } from 'react';
+import Feedback from './Feedback';
 
 interface LayoutProps {
   children: ReactNode;
@@ -7,6 +8,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -68,6 +70,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <a href="/register" className="nav-link">
               <span>Register</span>
             </a>
+            <button 
+              className="nav-link feedback-nav-btn" 
+              onClick={() => setFeedbackOpen(true)}
+              aria-label="Send Feedback"
+            >
+              <span>💬 Feedback</span>
+            </button>
           </nav>
           <div className="header-actions">
             <a href="/register" className="btn btn-secondary text-sm desktop-only"><span>Get Started</span></a>
@@ -100,6 +109,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <a href="/register" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
             Register
           </a>
+          <button 
+            className="mobile-nav-link feedback-mobile-btn" 
+            onClick={() => { setMobileMenuOpen(false); setFeedbackOpen(true); }}
+          >
+            💬 Send Feedback
+          </button>
           <a href="https://t.me/primusgpt_ai_bot" target="_blank" rel="noopener noreferrer" className="btn btn-primary mobile-nav-btn" onClick={() => setMobileMenuOpen(false)}>
             <span>Try Telegram Bot</span>
           </a>
@@ -107,6 +122,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       <main>{children}</main>
+
+      {/* Floating Action Button */}
+      <button 
+        className="feedback-fab" 
+        onClick={() => setFeedbackOpen(true)}
+        aria-label="Send Feedback"
+        title="Send Feedback"
+      >
+        💬
+      </button>
+
+      {/* Feedback Modal */}
+      <Feedback isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
 
       <footer className="footer">
         <div className="container text-center">
@@ -233,6 +261,25 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         .nav-link:hover::after {
           width: calc(100% - 2.5rem);
+        }
+
+        .feedback-nav-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          font-family: inherit;
+        }
+
+        .feedback-nav-btn:hover {
+          transform: scale(1.05);
+        }
+
+        .feedback-mobile-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          text-align: left;
+          width: 100%;
         }
 
         .header-actions {

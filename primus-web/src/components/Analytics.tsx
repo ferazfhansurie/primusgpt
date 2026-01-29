@@ -121,7 +121,9 @@ export default function Analytics() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [timeRange, setTimeRange] = useState(7);
-  const [activeSection, setActiveSection] = useState<'site' | 'database'>('site');
+  const [activeSection, setActiveSection] = useState<'site' | 'database' | 'feedback'>('site');
+  const [feedbackData, setFeedbackData] = useState<any>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('analytics_auth');
@@ -133,8 +135,11 @@ export default function Analytics() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
+      if (activeSection === 'feedback') {
+        fetchFeedback();
+      }
     }
-  }, [isAuthenticated, timeRange]);
+  }, [isAuthenticated, timeRange, activeSection]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -162,6 +167,27 @@ export default function Analytics() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFeedback = async () => {
+    setFeedbackLoading(true);
+    try {
+      const FEEDBACK_URL = import.meta.env.PROD
+        ? '/api/feedback/data'
+        : 'https://primusgpt-ai.vercel.app/api/feedback/data';
+      
+      const response = await fetch(`${FEEDBACK_URL}?password=${ANALYTICS_PASSWORD}`);
+      const result = await response.json();
+      if (response.ok) {
+        setFeedbackData(result);
+      } else {
+        console.error('Failed to load feedback:', result.error);
+      }
+    } catch (err) {
+      console.error('Failed to fetch feedback:', err);
+    } finally {
+      setFeedbackLoading(false);
     }
   };
 
@@ -294,6 +320,18 @@ export default function Analytics() {
             <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
           </svg>
           Database
+        </button>
+        <button
+          onClick={() => setActiveSection('feedback')}
+          className={`section-tab ${activeSection === 'feedback' ? 'active' : ''}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+          User Feedback
+          {feedbackData && feedbackData.byStatus?.new > 0 && (
+            <span className="feedback-badge">{feedbackData.byStatus.new}</span>
+          )}
         </button>
       </nav>
 
@@ -799,6 +837,148 @@ export default function Analytics() {
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {/* FEEDBACK SECTION */}
+        {activeSection === 'feedback' && (
+          <>
+            {feedbackLoading && !feedbackData ? (
+              <div className="loading-container">
+                <div className="loading-spinner" />
+                <p className="loading-text">Loading feedback...</p>
+              </div>
+            ) : feedbackData ? (
+              <>
+                {/* Feedback Stats */}
+                <div className="stats-grid">
+                  <StatCard
+                    title="Total Feedback"
+                    value={feedbackData.total}
+                    subValue="submissions"
+                    icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>}
+                    color="purple"
+                  />
+                  <StatCard
+                    title="New"
+                    value={feedbackData.byStatus.new}
+                    subValue="unread"
+                    icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>}
+                    color="orange"
+                  />
+                  <StatCard
+                    title="In Progress"
+                    value={feedbackData.byStatus.inProgress}
+                    subValue="working on"
+                    icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>}
+                    color="cyan"
+                  />
+                  <StatCard
+                    title="Resolved"
+                    value={feedbackData.byStatus.resolved}
+                    subValue="completed"
+                    icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>}
+                    color="green"
+                  />
+                </div>
+
+                {/* Category Breakdown */}
+                {Object.keys(feedbackData.byCategory).length > 0 && (
+                  <div className="card">
+                    <h3 className="card-title">Feedback by Category</h3>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie
+                          data={Object.entries(feedbackData.byCategory).map(([category, count]) => ({
+                            name: category.charAt(0).toUpperCase() + category.slice(1),
+                            value: count
+                          }))}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {Object.keys(feedbackData.byCategory).map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ background: 'rgba(15, 15, 25, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Feedback List */}
+                <div className="card">
+                  <h3 className="card-title">
+                    <span>All Feedback</span>
+                    <button onClick={fetchFeedback} className="refresh-btn-small" disabled={feedbackLoading}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" className={feedbackLoading ? 'spin' : ''}>
+                        <path d="M21 12a9 9 0 11-6.219-8.56" />
+                      </svg>
+                    </button>
+                  </h3>
+                  <div className="feedback-list">
+                    {feedbackData.feedbacks.length > 0 ? (
+                      feedbackData.feedbacks.map((feedback: any, index: number) => {
+                        const categoryIcons: { [key: string]: string } = {
+                          bug: '🐛',
+                          feature: '💡',
+                          improvement: '🚀',
+                          question: '❓',
+                          other: '📝'
+                        };
+
+                        const statusColors: { [key: string]: string } = {
+                          new: 'orange',
+                          inProgress: 'cyan',
+                          resolved: 'green'
+                        };
+
+                        const status = feedback.resolved ? 'resolved' : feedback.status || 'new';
+
+                        return (
+                          <div key={index} className={`feedback-item ${status === 'new' ? 'feedback-new' : ''}`}>
+                            <div className="feedback-header-row">
+                              <div className="feedback-meta">
+                                <span className="feedback-category">
+                                  {categoryIcons[feedback.category] || '📝'} {feedback.category}
+                                </span>
+                                <span className={`feedback-status status-${statusColors[status]}`}>
+                                  {status === 'new' ? 'New' : status === 'inProgress' ? 'In Progress' : 'Resolved'}
+                                </span>
+                              </div>
+                              <span className="feedback-time">
+                                {format(new Date(feedback.timestamp), 'MMM d, yyyy HH:mm')}
+                              </span>
+                            </div>
+                            <div className="feedback-message">{feedback.message}</div>
+                            <div className="feedback-footer">
+                              <span className="feedback-email">
+                                {feedback.email !== 'anonymous' ? feedback.email : '👤 Anonymous'}
+                              </span>
+                              {feedback.url && (
+                                <span className="feedback-url" title={feedback.url}>
+                                  📍 {new URL(feedback.url).pathname}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="no-data">No feedback yet</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="no-data">No feedback data available</div>
+            )}
           </>
         )}
       </main>
@@ -1376,6 +1556,174 @@ const dashboardStyles = `
     }
     .signal-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  /* Feedback Styles */
+  .feedback-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 8px;
+    min-width: 18px;
+  }
+
+  .feedback-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 800px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .feedback-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s ease;
+  }
+
+  .feedback-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(139, 92, 246, 0.3);
+  }
+
+  .feedback-new {
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+  }
+
+  .feedback-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .feedback-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .feedback-category {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+
+  .feedback-status {
+    display: inline-flex;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .status-orange {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+  }
+
+  .status-cyan {
+    background: rgba(6, 182, 212, 0.2);
+    color: #22d3ee;
+  }
+
+  .status-green {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+  }
+
+  .feedback-time {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .feedback-message {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+    white-space: pre-wrap;
+  }
+
+  .feedback-footer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .feedback-email {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .feedback-url {
+    color: rgba(139, 92, 246, 0.7);
+    font-size: 13px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .refresh-btn-small {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .refresh-btn-small:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .refresh-btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
     }
   }
 `;
