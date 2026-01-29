@@ -18,6 +18,7 @@ let database = null;
 let authApi = null;
 let paymentApi = null;
 let webAuthApi = null;
+let analysisApi = null;
 
 // CORS configuration
 const allowedOrigins = [
@@ -89,6 +90,7 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       webAuth: '/api/web-auth',
       payment: '/api/payment',
+      analysis: '/api/analysis',
       health: '/api/health'
     }
   });
