@@ -201,7 +201,7 @@ router.post('/run', requireWebAuth, async (req, res) => {
 
       // OHLCV data for client-side charting
       ohlcvData: {
-        [timeframes[0].interval]: tf1Data.values.map(v => ({
+        [timeframes[0].interval]: tf1Data.map(v => ({
           time: v.datetime,
           open: parseFloat(v.open),
           high: parseFloat(v.high),
@@ -209,7 +209,7 @@ router.post('/run', requireWebAuth, async (req, res) => {
           close: parseFloat(v.close),
           volume: v.volume ? parseFloat(v.volume) : 0
         })),
-        [timeframes[1].interval]: tf2Data.values.map(v => ({
+        [timeframes[1].interval]: tf2Data.map(v => ({
           time: v.datetime,
           open: parseFloat(v.open),
           high: parseFloat(v.high),
