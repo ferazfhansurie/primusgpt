@@ -78,6 +78,12 @@
   animation: fadeInUp 0.5s ease-out;
 }
 
+/* Full width for result view */
+.ta-wrapper:has(.ta-result-card) {
+  max-width: 1400px;
+  padding: 0 2rem;
+}
+
 .ta-wrapper.transitioning {
   animation: fadeOutDown 0.3s ease-in forwards;
 }
@@ -117,6 +123,11 @@
   box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.3),
     0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Result card with enhanced layout */
+.ta-result-card {
+  padding: 2.5rem;
 }
 
 .ta-card-glow {
@@ -1898,6 +1909,49 @@
    RESPONSIVE
    ======================================== */
 
+/* Desktop - larger screens */
+@media (min-width: 1200px) {
+  .ta-result-card {
+    padding: 3rem;
+  }
+  
+  .ta-result-header {
+    margin-bottom: 2rem;
+  }
+  
+  .ta-signal-hero {
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .ta-zone-display {
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .ta-levels-container {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .ta-level-card {
+    padding: 1.25rem 1rem;
+  }
+  
+  .ta-chart-section {
+    margin-bottom: 2rem;
+  }
+}
+
+/* Tablet and mobile */
+@media (max-width: 1199px) {
+  .ta-wrapper:has(.ta-result-card) {
+    max-width: 100%;
+    padding: 0 1rem;
+  }
+}
+
 @media (max-width: 600px) {
   .ta-container {
     padding: 1rem 0.75rem;
@@ -1905,9 +1959,17 @@
     padding-top: 1.5rem;
   }
 
+  .ta-wrapper:has(.ta-result-card) {
+    padding: 0;
+  }
+
   .ta-card {
     padding: 1.5rem 1.25rem;
     border-radius: 20px;
+  }
+  
+  .ta-result-card {
+    padding: 1.5rem 1.25rem;
   }
 
   .ta-brand {
