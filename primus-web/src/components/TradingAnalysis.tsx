@@ -1,13 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TradingAnalysis.css';
 
-interface User {
-  id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
-}
-
 interface SubscriptionStatus {
   type: 'trial' | 'subscription' | 'expired';
   daysLeft?: number;
