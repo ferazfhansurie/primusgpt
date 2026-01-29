@@ -199,6 +199,26 @@ router.post('/run', requireWebAuth, async (req, res) => {
       // Charts as base64
       charts: combinedAnalysis.chartImages || [],
 
+      // OHLCV data for client-side charting
+      ohlcvData: {
+        [timeframes[0].interval]: tf1Data.values.map(v => ({
+          time: v.datetime,
+          open: parseFloat(v.open),
+          high: parseFloat(v.high),
+          low: parseFloat(v.low),
+          close: parseFloat(v.close),
+          volume: v.volume ? parseFloat(v.volume) : 0
+        })),
+        [timeframes[1].interval]: tf2Data.values.map(v => ({
+          time: v.datetime,
+          open: parseFloat(v.open),
+          high: parseFloat(v.high),
+          low: parseFloat(v.low),
+          close: parseFloat(v.close),
+          volume: v.volume ? parseFloat(v.volume) : 0
+        }))
+      },
+
       // Timeframe info
       timeframes: timeframes.map(tf => tf.interval),
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import CandlestickChart from './CandlestickChart';
 import './TradingAnalysis.css';
 
 interface SubscriptionStatus {
@@ -32,6 +33,16 @@ interface AnalysisResult {
   takeProfit1?: number;
   takeProfit2?: number;
   charts: ChartImage[];
+  ohlcvData?: {
+    [timeframe: string]: Array<{
+      time: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>;
+  };
   timeframes: string[];
   reasoning: string;
   validation?: {
@@ -835,7 +846,21 @@ const TradingAnalysis: React.FC = () => {
         </div>
 
         {/* Chart */}
-        {charts && charts.length > 0 ? (
+        {analysisResult.ohlcvData && analysisResult.timeframes.map((timeframe) => (
+          <CandlestickChart
+            key={timeframe}
+            data={analysisResult.ohlcvData![timeframe] || []}
+            zone={zone}
+            stopLoss={stopLoss}
+            takeProfit1={takeProfit1}
+            takeProfit2={takeProfit2}
+            timeframe={timeframe}
+            pair={pair || ''}
+          />
+        ))}
+
+        {/* Fallback to image charts if OHLCV data not available */}
+        {!analysisResult.ohlcvData && charts && charts.length > 0 ? (
           <div className="ta-chart-section">
             <div className="ta-chart-header">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ta-chart-icon">
@@ -851,7 +876,7 @@ const TradingAnalysis: React.FC = () => {
               />
             </div>
           </div>
-        ) : (
+        ) : !analysisResult.ohlcvData && (
           <div className="ta-chart-unavailable">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="ta-chart-unavailable-icon">
               <path d="M3 3V21H21"/><path d="M7 14L11 10L15 14L21 8"/>
