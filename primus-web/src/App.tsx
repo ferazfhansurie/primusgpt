@@ -16,6 +16,7 @@ import LoadingScreen from './components/LoadingScreen';
 import Register from './components/RegisterWithPayment';
 import RegisterSuccess from './components/RegisterSuccess';
 import Analytics from './components/Analytics';
+import TradingAnalysis from './components/TradingAnalysis';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -62,6 +63,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/register" element={<Layout><Register /></Layout>} />
         <Route path="/register/success" element={<Layout><RegisterSuccess /></Layout>} />
+        <Route path="/analyze" element={<Layout><TradingAnalysis /></Layout>} />
         <Route path="/analytics" element={<Analytics />} />
       </Routes>
     </>

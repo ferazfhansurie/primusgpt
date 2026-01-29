@@ -62,6 +62,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <a href="#how-it-works" className="nav-link" onClick={(e) => handleNavClick(e, '#how-it-works')}>
               <span>How It Works</span>
             </a>
+            <a href="/analyze" className="nav-link">
+              <span>Analyze</span>
+            </a>
             <a href="/register" className="nav-link">
               <span>Register</span>
             </a>
@@ -90,6 +93,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </a>
           <a href="#how-it-works" className="mobile-nav-link" onClick={(e) => handleNavClick(e, '#how-it-works')}>
             How It Works
+          </a>
+          <a href="/analyze" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+            Analyze
           </a>
           <a href="/register" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
             Register

@@ -4,7 +4,26 @@ import database from '../db/database.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY?.trim());
+
+// Initialize Stripe only if secret key is provided
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY?.trim()) {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim());
+  logger.info('Stripe initialized');
+} else {
+  logger.warn('STRIPE_SECRET_KEY not provided - payment endpoints disabled');
+}
+
+// Middleware to check if Stripe is available
+function requireStripe(req, res, next) {
+  if (!stripe) {
+    return res.status(503).json({
+      success: false,
+      error: 'Payment service unavailable. Please configure STRIPE_SECRET_KEY.'
+    });
+  }
+  next();
+}
 
 // Subscription plans configuration
 const SUBSCRIPTION_PLANS = {
@@ -43,7 +62,7 @@ const SUBSCRIPTION_PLANS = {
  * POST /api/payment/create-checkout-session
  * Body: { email, phone, first_name, last_name, plan_id }
  */
-router.post('/create-checkout-session', async (req, res) => {
+router.post('/create-checkout-session', requireStripe, async (req, res) => {
   try {
     const { email, phone, first_name, last_name, plan_id = 'quarterly' } = req.body;
 
@@ -146,7 +165,7 @@ router.post('/create-checkout-session', async (req, res) => {
  * Verify payment and complete registration
  * GET /api/payment/verify-session/:sessionId
  */
-router.get('/verify-session/:sessionId', async (req, res) => {
+router.get('/verify-session/:sessionId', requireStripe, async (req, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -260,7 +279,7 @@ router.get('/verify-session/:sessionId', async (req, res) => {
  * Stripe Webhook Handler
  * POST /api/payment/webhook
  */
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', requireStripe, async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 

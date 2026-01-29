@@ -7,6 +7,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authApi from './api/authApi.js';
 import paymentApi from './api/paymentApi.js';
+import webAuthApi from './api/webAuthApi.js';
+import analysisApi from './api/analysisApi.js';
 import database from './db/database.js';
 import logger from './utils/logger.js';
 
@@ -66,6 +68,8 @@ await database.initialize();
 // Routes
 app.use('/api/auth', authApi);
 app.use('/api/payment', paymentApi);
+app.use('/api/web-auth', webAuthApi);
+app.use('/api/analysis', analysisApi);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -74,6 +78,9 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
+      webAuth: '/api/web-auth',
+      analysis: '/api/analysis',
+      payment: '/api/payment',
       health: '/api/auth/health'
     }
   });

@@ -1,9 +1,22 @@
-import { createCanvas } from 'canvas';
 import fs from 'fs';
 import path from 'path';
 import config from '../utils/config.js';
 import logger from '../utils/logger.js';
 import { formatPrice } from '../utils/pips.js';
+
+// Lazy load canvas to handle missing dependency gracefully
+let createCanvas = null;
+let canvasAvailable = false;
+
+try {
+  const canvasModule = await import('canvas');
+  createCanvas = canvasModule.createCanvas;
+  canvasAvailable = true;
+  logger.info('Canvas module loaded successfully');
+} catch (error) {
+  logger.warn('Canvas module not available - chart generation disabled');
+  canvasAvailable = false;
+}
 
 /**
  * Chart Generator
@@ -33,6 +46,12 @@ class ChartGenerator {
    */
   async generateChart(ohlcv, pair, timeframe, zones = null, validationErrors = null) {
     try {
+      // Check if canvas is available
+      if (!canvasAvailable || !createCanvas) {
+        logger.warn(`Chart generation skipped for ${pair} ${timeframe} - canvas not available`);
+        return null;
+      }
+
       logger.info(`Generating chart for ${pair} ${timeframe}...`);
 
       // Create canvas
