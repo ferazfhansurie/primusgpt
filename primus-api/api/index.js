@@ -161,7 +161,8 @@ app.use('/api/payment', async (req, res, next) => {
     });
   }
 });
-Web Auth routes with lazy loading and DB initialization
+
+// Web Auth routes with lazy loading and DB initialization
 app.use('/api/web-auth', async (req, res, next) => {
   try {
     // Initialize database first
