@@ -43,11 +43,10 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
-
-// Explicit preflight handling
-app.options('*', cors());
 
 // Stripe webhook endpoint needs raw body
 app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
