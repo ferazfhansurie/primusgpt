@@ -101,6 +101,12 @@ router.post('/create-checkout-session', requireStripe, async (req, res) => {
       });
     }
 
+    // Ensure WEB_URL has a scheme (https://)
+    let webUrl = process.env.WEB_URL || '';
+    if (webUrl && !webUrl.startsWith('http://') && !webUrl.startsWith('https://')) {
+      webUrl = `https://${webUrl}`;
+    }
+
     // Create Stripe Checkout Session with subscription
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -132,8 +138,8 @@ router.post('/create-checkout-session', requireStripe, async (req, res) => {
           plan_id: plan.id,
         },
       },
-      success_url: `${process.env.WEB_URL}/register/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.WEB_URL}/register?canceled=true`,
+      success_url: `${webUrl}/register/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${webUrl}/register?canceled=true`,
       customer_email: email,
       metadata: {
         email,
